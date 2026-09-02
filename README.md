@@ -10,6 +10,19 @@ ModelLink 官方 Go 客户端，用于获取、校验、缓存和解析版本化
 go get github.com/goroutined/modellink-go
 ```
 
+## 按需求选择
+
+| 需求 | 从哪里开始 |
+| --- | --- |
+| 读取当前模型目录 | [`examples/basic`](./examples/basic) |
+| 检查并更新数据 | [`examples/update`](./examples/update) |
+| 修改缓存目录和保留数量 | [`examples/file-cache`](./examples/file-cache) |
+| 接入 Redis 或对象存储 | [自定义缓存](#自定义缓存) |
+| 维护 Schema 和生成类型 | [Schema 与代码生成](#schema-与代码生成) |
+
+大多数应用只需要 `New`、`Load` 和 `Snapshot` 查询方法，不需要了解缓存接口或
+Schema 生成过程。
+
 ## 快速开始
 
 ```go
@@ -90,6 +103,38 @@ if status.UpdateAvailable {
 ```go
 snapshot, err := client.LoadVersion(ctx, "0.1.3")
 ```
+
+## Schema 兼容性提醒
+
+SDK 会在每次加载后，本地比较数据包 `manifest.json` 中的 Schema 版本与 SHA-256，
+不会为此增加网络请求：
+
+- 数据使用更高的破坏性 Schema 版本时返回 `ErrUnsupportedSchema`，不切换当前缓存。
+- Schema 哈希不一致但仍可解析时继续返回 Snapshot，并产生非阻断 warning。
+- 仅 npm 数据版本不同、Schema 哈希相同时不会产生 warning。
+
+库默认不主动写日志。服务端可通过 `OnWarning` 接入自己的日志或监控：
+
+```go
+client, err := modellink.New(modellink.Options{
+    OnWarning: func(warning modellink.Warning) {
+        slog.Warn(warning.Message, "code", warning.Code)
+    },
+})
+```
+
+warning 也会保留在 Snapshot 中，适合不希望使用回调的程序：
+
+```go
+snapshot, err := client.Load(ctx)
+for _, warning := range snapshot.Warnings() {
+    // 写入日志、监控或运维状态页
+}
+```
+
+同一个 Client 对同一数据版本和 Schema 哈希只调用一次 `OnWarning`，重复或并发
+`Load` 不会刷屏。显式加载旧数据时会建议更新数据；数据 Schema 较新时会建议升级
+`modellink-go`。
 
 ## 缓存与并发
 
@@ -229,7 +274,7 @@ model.Temperature != nil && *model.Temperature  // 明确支持调节
 ```text
 schema/schema.json
 schema/schema.lock.json
-types_generated.go
+zz_types_generated.go
 ```
 
 `schema.lock.json` 记录 npm 包版本、Schema 版本、SHA-256 和 ModelLink 源 commit。
@@ -260,6 +305,36 @@ go run ./internal/cmd/schemacheck
 ```
 
 当前客户端支持的破坏性 Schema 版本由 `modellink.SupportedSchemaVersion` 表示。遇到更高版本时客户端会返回 `modellink.ErrUnsupportedSchema`，并继续保留旧缓存。
+
+## 仓库结构
+
+根目录保持单一的 `modellink` package，外部项目始终只需要一个 import。文件按职责
+拆分，目录并不代表额外的公共子包：
+
+```text
+client.go              Client、Options 和公共版本结构
+client_load.go         Load、LoadVersion 和缓存读取
+client_update.go       版本检查、下载、更新与并发协调
+snapshot.go            Model、Provider、Offering 查询
+warning.go             Schema 兼容性警告与版本方向判断
+
+cache.go               Cache、CacheStore 和 Locker 接口
+cache_file.go          默认文件缓存和原子读写
+cache_file_lock.go     跨进程文件锁
+cache_file_prune.go    缓存版本清理
+
+schema.go              内嵌 Schema 和版本元数据
+types_custom.go        手写的特殊 JSON 类型
+zz_types_generated.go  Schema 自动生成类型，请勿手工修改
+
+internal/artifact/     npm 下载、integrity 和文件哈希校验
+internal/cmd/          Schema 同步、生成和检查命令
+examples/              可直接运行的使用示例
+schema/                生成依据和版本锁文件
+```
+
+修改公开数据类型时，应先更新 ModelLink 的 `schema.json`，然后同步 Schema 并重新运行
+`go generate ./...`，不要直接编辑 `zz_types_generated.go`。
 
 ## 数据来源
 

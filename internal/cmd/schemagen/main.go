@@ -21,7 +21,7 @@ func main() {
 	check(err)
 	defer os.RemoveAll(temporary)
 
-	generated := filepath.Join(temporary, "types_generated.go")
+	generated := filepath.Join(temporary, "zz_types_generated.go")
 	command := exec.Command(
 		"go",
 		"run",
@@ -65,7 +65,7 @@ func main() {
 
 	var output bytes.Buffer
 	check(format.Node(&output, files, parsed))
-	check(writeAtomic(filepath.Join(root, "types_generated.go"), output.Bytes()))
+	check(writeAtomic(filepath.Join(root, "zz_types_generated.go"), output.Bytes()))
 }
 
 func replaceStructField(
