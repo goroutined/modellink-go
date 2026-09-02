@@ -16,6 +16,7 @@ go get github.com/goroutined/modellink-go
 | --- | --- |
 | 读取当前模型目录 | [`examples/basic`](./examples/basic) |
 | 检查并更新数据 | [`examples/update`](./examples/update) |
+| 审核并切换指定版本 | [`examples/version-control`](./examples/version-control) |
 | 修改缓存目录和保留数量 | [`examples/file-cache`](./examples/file-cache) |
 | 接入 Redis 或对象存储 | [自定义缓存](#自定义缓存) |
 | 维护 Schema 和生成类型 | [Schema 与代码生成](#schema-与代码生成) |
@@ -48,7 +49,7 @@ func main() {
         log.Fatal(err)
     }
 
-    model, ok := snapshot.Offering("deepseek", "deepseek-v4-pro")
+    model, ok := snapshot.ProviderModel("deepseek", "deepseek-v4-pro")
     if !ok {
         log.Fatal("model not found")
     }
@@ -61,8 +62,14 @@ func main() {
 ```go
 snapshot.Model("deepseek/deepseek-v4-pro")
 snapshot.Provider("deepseek")
-snapshot.Offering("deepseek", "deepseek-v4-pro")
+snapshot.ProviderModel("deepseek", "deepseek-v4-pro")
 ```
+
+| 查询方法 | 返回内容 |
+| --- | --- |
+| `Model` | 研发机构发布的基础模型元数据 |
+| `Provider` | 服务商及其完整可调用模型目录 |
+| `ProviderModel` | 指定服务商下可调用模型的价格、协议和限制 |
 
 也可以直接访问完整的强类型目录：
 
@@ -76,7 +83,137 @@ snapshot.File(modellink.FileCatalog) // npm 包内经过哈希校验的原始字
 
 返回的 Snapshot 会在进程内共享，请将其视为只读数据。
 
-## 检查和更新
+## Client 功能地图
+
+公开方法分成底层能力、版本组合和加载入口。下载地址、npm tarball 和存储过程都隐藏在
+Client 内部：
+
+```mermaid
+flowchart BT
+    subgraph P["底层能力"]
+        CV["CurrentVersion<br/>读取当前版本"]
+        LC["LoadCached<br/>读取当前缓存"]
+        FL["FindLatest<br/>查询 Registry"]
+        AV["ActivateVersion<br/>激活已缓存版本"]
+    end
+
+    subgraph C["版本组合"]
+        LV["LoadVersion<br/>加载指定版本"]
+        CL["CheckLatest<br/>检查最新版本"]
+        SV["SwitchVersion<br/>切换指定版本"]
+    end
+
+    subgraph H["加载入口"]
+        LL["LoadLatest<br/>防降级加载最新版"]
+        LD["Load<br/>缓存优先加载"]
+    end
+
+    CV --> CL
+    FL --> CL
+    LV --> SV
+    AV --> SV
+    CL --> LL
+    SV --> LL
+    LC --> LD
+    LL --> LD
+```
+
+返回值遵循固定规则：
+
+- `Current`、`Find`、`Check` 返回轻量状态。
+- `Activate`、`Switch` 执行动作，只返回 `error`。
+- 只有 `Load*` 返回 `*Snapshot`。
+
+完整函数签名：
+
+```go
+CurrentVersion(ctx context.Context) (string, error)
+FindLatest(ctx context.Context) (string, error)
+CheckLatest(ctx context.Context) (modellink.UpdateStatus, error)
+
+ActivateVersion(ctx context.Context, version string) error
+SwitchVersion(ctx context.Context, version string) error
+
+LoadCached(ctx context.Context) (*modellink.Snapshot, error)
+LoadVersion(ctx context.Context, version string) (*modellink.Snapshot, error)
+LoadLatest(ctx context.Context) (*modellink.Snapshot, error)
+Load(ctx context.Context) (*modellink.Snapshot, error)
+```
+
+### 行为对照
+
+| 方法 | Registry | 写缓存 | 修改 current | 返回内容 |
+| --- | --- | --- | --- | --- |
+| `CurrentVersion` | 否 | 否 | 否 | 当前版本号 |
+| `FindLatest` | 只查询元数据 | 否 | 否 | Registry 最新版本号 |
+| `CheckLatest` | 只查询元数据 | 否 | 否 | 版本比较状态 |
+| `ActivateVersion` | 否 | 否 | 是 | `error` |
+| `SwitchVersion` | 缓存未命中时访问 | 可能 | 是 | `error` |
+| `LoadCached` | 否 | 否 | 否 | 当前 Snapshot |
+| `LoadVersion` | 缓存未命中时访问 | 可能 | 否 | 指定版本 Snapshot |
+| `LoadLatest` | 是 | 可能 | 是 | 安全的最新 Snapshot |
+| `Load` | 仅无有效缓存时 | 可能 | 可能 | 当前可用 Snapshot |
+
+`LoadCached` 是本地只读调用，不发生网络阻塞，但 Go 的同步文件读取仍可能产生短暂磁盘等待。
+
+## 加载与版本控制
+
+### 缓存优先
+
+`Load` 先读取当前有效缓存，不检查更新；只有没有可用缓存时才阻塞调用
+`LoadLatest`：
+
+```go
+snapshot, err := client.Load(ctx)
+```
+
+### 明确要求最新
+
+`LoadLatest` 每次都会检查 Registry。Registry 较新或当前无版本时切换到最新版本；
+Registry 暂时落后时保持本地较新版本并产生 `WarningRegistryBehind`：
+
+```go
+snapshot, err := client.LoadLatest(ctx)
+```
+
+### 完全本地启动
+
+```go
+snapshot, err := client.LoadCached(ctx)
+if errors.Is(err, modellink.ErrNoCachedData) {
+    // 使用应用自身随程序发布的 fallback 数据，并在后台调用 LoadLatest。
+}
+```
+
+### 固定版本
+
+`LoadVersion` 必要时下载并校验指定版本，但不修改 current：
+
+```go
+snapshot, err := client.LoadVersion(ctx, "0.1.4")
+```
+
+### 审核后切换
+
+```go
+version, err := client.FindLatest(ctx)
+candidate, err := client.LoadVersion(ctx, version)
+
+// 检查 candidate 后，显式激活已经缓存的版本。
+err = client.ActivateVersion(ctx, version)
+active, err := client.LoadCached(ctx)
+```
+
+简化为一步切换指定版本：
+
+```go
+err := client.SwitchVersion(ctx, "0.1.4")
+```
+
+`SwitchVersion` 是显式操作，因此允许开发者主动升级或降级；自动执行的 `LoadLatest`
+始终禁止降级。
+
+## 检查最新版本
 
 ```go
 status, err := client.CheckLatest(ctx)
@@ -86,22 +223,9 @@ if err != nil {
 if status.UpdateAvailable {
     snapshot, err = client.LoadLatest(ctx)
 }
-```
-
-几个方法的网络行为是明确分开的：
-
-| 方法 | 行为 |
-| --- | --- |
-| `Load` | 立即读取当前缓存；没有缓存时才下载最新版 |
-| `Latest` | 只查询 Registry 中的最新版本元数据 |
-| `CheckLatest` | 比较当前版本和 Registry 最新版本，不下载数据包 |
-| `LoadLatest` | 查询并加载最新版，成功后原子切换当前缓存 |
-| `LoadVersion` | 加载指定版本，但不改变 `Load` 使用的当前版本 |
-
-固定版本示例：
-
-```go
-snapshot, err := client.LoadVersion(ctx, "0.1.3")
+if status.RegistryBehind {
+    // Registry 镜像暂时落后，本地版本不会被自动降级。
+}
 ```
 
 ## Schema 兼容性提醒
@@ -113,7 +237,8 @@ SDK 会在每次加载后，本地比较数据包 `manifest.json` 中的 Schema 
 - Schema 哈希不一致但仍可解析时继续返回 Snapshot，并产生非阻断 warning。
 - 仅 npm 数据版本不同、Schema 哈希相同时不会产生 warning。
 
-库默认不主动写日志。服务端可通过 `OnWarning` 接入自己的日志或监控：
+库默认不主动写日志。Schema 漂移和 Registry 落后等非阻断事件可以通过
+`OnWarning` 接入自己的日志或监控：
 
 ```go
 client, err := modellink.New(modellink.Options{
@@ -123,7 +248,7 @@ client, err := modellink.New(modellink.Options{
 })
 ```
 
-warning 也会保留在 Snapshot 中，适合不希望使用回调的程序：
+与 Snapshot 数据本身相关的 warning 也会保留在 Snapshot 中：
 
 ```go
 snapshot, err := client.Load(ctx)
@@ -132,9 +257,8 @@ for _, warning := range snapshot.Warnings() {
 }
 ```
 
-同一个 Client 对同一数据版本和 Schema 哈希只调用一次 `OnWarning`，重复或并发
-`Load` 不会刷屏。显式加载旧数据时会建议更新数据；数据 Schema 较新时会建议升级
-`modellink-go`。
+同一个 Client 对同一事件只调用一次 `OnWarning`，重复或并发调用不会刷屏。显式加载
+旧数据时会建议更新数据；数据 Schema 较新时会建议升级 `modellink-go`。
 
 ## 缓存与并发
 
@@ -313,9 +437,10 @@ go run ./internal/cmd/schemacheck
 
 ```text
 client.go              Client、Options 和公共版本结构
-client_load.go         Load、LoadVersion 和缓存读取
-client_update.go       版本检查、下载、更新与并发协调
-snapshot.go            Model、Provider、Offering 查询
+client_api.go          完整公开 Client API 与语义注释
+client_load.go         缓存读取、固定版本和激活实现
+client_update.go       Registry 查询、防降级和并发协调
+snapshot.go            Model、Provider、ProviderModel 查询
 warning.go             Schema 兼容性警告与版本方向判断
 
 cache.go               Cache、CacheStore 和 Locker 接口

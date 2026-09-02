@@ -19,6 +19,9 @@ const (
 	// WarningSchemaMismatch means the two Schema hashes differ but their package
 	// versions do not establish which copy is newer.
 	WarningSchemaMismatch WarningCode = "schema_mismatch"
+	// WarningRegistryBehind means the registry latest version is older than the
+	// active local version and automatic downgrade was prevented.
+	WarningRegistryBehind WarningCode = "registry_behind"
 )
 
 // Warning describes an actionable, non-fatal compatibility condition.
@@ -32,6 +35,27 @@ type Warning struct {
 	EmbeddedPackageVersion string
 	EmbeddedSchemaVersion  int
 	EmbeddedSchemaSHA256   string
+	CurrentVersion         string
+	RegistryVersion        string
+}
+
+func registryBehindWarning(current string, registry string) Warning {
+	return Warning{
+		Code:            WarningRegistryBehind,
+		Message:         fmt.Sprintf("ModelLink registry latest %s is behind active version %s; automatic downgrade was prevented", registry, current),
+		CurrentVersion:  current,
+		RegistryVersion: registry,
+	}
+}
+
+func (warning Warning) key() string {
+	return strings.Join([]string{
+		string(warning.Code),
+		warning.DataPackageVersion,
+		warning.DataSchemaSHA256,
+		warning.CurrentVersion,
+		warning.RegistryVersion,
+	}, "\x00")
 }
 
 func schemaWarnings(manifest Manifest) []Warning {

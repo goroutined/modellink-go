@@ -33,5 +33,8 @@ func main() {
 			log.Fatal(err)
 		}
 	}
+	if status.RegistryBehind {
+		fmt.Printf("registry %s is behind active %s; keeping local data\n", status.LatestVersion, status.CurrentVersion)
+	}
 	fmt.Printf("active ModelLink data: %s\n", snapshot.Manifest.Version)
 }

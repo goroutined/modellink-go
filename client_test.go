@@ -77,6 +77,77 @@ func TestLoadUsesVerifiedCacheWithoutNetwork(t *testing.T) {
 	}
 }
 
+func TestLoadCachedNeverUsesNetwork(t *testing.T) {
+	registry := newTestRegistry(t, "1.2.3", map[string]int{"1.2.3": 1})
+	client, err := New(Options{
+		Registry: registry.server.URL,
+		Cache:    mustFileCache(t, t.TempDir()),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.LoadCached(context.Background()); !errors.Is(err, ErrNoCachedData) {
+		t.Fatalf("LoadCached returned %v, want ErrNoCachedData", err)
+	}
+	if registry.metadata.Load() != 0 || registry.downloads.Load() != 0 {
+		t.Fatal("LoadCached accessed the registry")
+	}
+}
+
+func TestLoadPrefersCacheWithoutCheckingLatest(t *testing.T) {
+	registry := newTestRegistry(t, "1.0.0", map[string]int{
+		"1.0.0": 1,
+		"2.0.0": 1,
+	})
+	client, err := New(Options{
+		Registry: registry.server.URL,
+		Cache:    mustFileCache(t, t.TempDir()),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	active, err := client.LoadLatest(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadataBefore := registry.metadata.Load()
+	registry.latest.Store("2.0.0")
+	loaded, err := client.Load(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded != active || loaded.Manifest.Version != "1.0.0" {
+		t.Fatal("Load did not prefer the active cache")
+	}
+	if registry.metadata.Load() != metadataBefore {
+		t.Fatal("Load checked the registry despite an active cache")
+	}
+}
+
+func TestFindLatestOnlyReturnsVersionMetadata(t *testing.T) {
+	registry := newTestRegistry(t, "1.2.3", map[string]int{"1.2.3": 1})
+	client, err := New(Options{
+		Registry: registry.server.URL,
+		Cache:    mustFileCache(t, t.TempDir()),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	version, err := client.FindLatest(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if version != "1.2.3" {
+		t.Fatalf("FindLatest returned %q", version)
+	}
+	if registry.metadata.Load() != 1 || registry.downloads.Load() != 0 {
+		t.Fatal("FindLatest performed more than a metadata query")
+	}
+	if _, err := client.CurrentVersion(context.Background()); !errors.Is(err, ErrNoCachedData) {
+		t.Fatalf("FindLatest changed current version: %v", err)
+	}
+}
+
 func TestLoadRepairsCorruptCachedVersion(t *testing.T) {
 	cacheDir := t.TempDir()
 	registry := newTestRegistry(t, "1.2.3", map[string]int{"1.2.3": 1})
@@ -146,6 +217,54 @@ func TestLoadVersionDoesNotChangeActiveVersion(t *testing.T) {
 	}
 	if stillActive != active {
 		t.Fatal("loading a fixed version changed the active snapshot")
+	}
+}
+
+func TestActivateAndSwitchVersion(t *testing.T) {
+	registry := newTestRegistry(t, "1.0.0", map[string]int{
+		"1.0.0": 1,
+		"2.0.0": 1,
+	})
+	client, err := New(Options{
+		Registry: registry.server.URL,
+		Cache:    mustFileCache(t, t.TempDir()),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := client.ActivateVersion(context.Background(), "2.0.0"); !errors.Is(err, ErrNoCachedData) {
+		t.Fatalf("ActivateVersion returned %v, want ErrNoCachedData", err)
+	}
+	if registry.metadata.Load() != 0 || registry.downloads.Load() != 0 {
+		t.Fatal("ActivateVersion accessed the registry")
+	}
+
+	candidate, err := client.LoadVersion(context.Background(), "2.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if candidate.Manifest.Version != "2.0.0" {
+		t.Fatal("LoadVersion returned an unexpected version")
+	}
+	if _, err := client.CurrentVersion(context.Background()); !errors.Is(err, ErrNoCachedData) {
+		t.Fatalf("LoadVersion changed current version: %v", err)
+	}
+	if err := client.ActivateVersion(context.Background(), "2.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	if current, err := client.CurrentVersion(context.Background()); err != nil || current != "2.0.0" {
+		t.Fatalf("CurrentVersion returned %q, %v", current, err)
+	}
+
+	if err := client.SwitchVersion(context.Background(), "1.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	active, err := client.LoadCached(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active.Manifest.Version != "1.0.0" {
+		t.Fatalf("SwitchVersion activated %q", active.Manifest.Version)
 	}
 }
 

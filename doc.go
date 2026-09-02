@@ -6,12 +6,13 @@
 //
 //	client, err := modellink.New(modellink.Options{})
 //	snapshot, err := client.Load(ctx)
-//	model, ok := snapshot.Offering("deepseek", "deepseek-v4-pro")
+//	model, ok := snapshot.ProviderModel("deepseek", "deepseek-v4-pro")
 //
-// Load reads the active verified cache without checking the network. Use
-// CheckLatest and LoadLatest when the application decides to check for an
-// update. Use NewFileCache to customize local retention, or implement Cache to
-// connect Redis or another shared backend. Schema compatibility warnings are
-// available from Snapshot.Warnings and can also be delivered through
-// Options.OnWarning.
+// Load prefers the active verified cache and only calls LoadLatest when no
+// usable cache exists. LoadCached never accesses the registry; LoadLatest
+// always checks it and prevents automatic downgrade. LoadVersion reads an
+// explicit version without activating it, while SwitchVersion deliberately
+// changes the active version. Use NewFileCache to customize local retention,
+// or implement Cache to connect Redis or another shared backend. Compatibility
+// warnings are available from Snapshot.Warnings and Options.OnWarning.
 package modellink

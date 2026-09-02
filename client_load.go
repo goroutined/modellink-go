@@ -2,57 +2,145 @@ package modellink
 
 import (
 	"context"
+	"errors"
 	"fmt"
-
-	"github.com/goroutined/modellink-go/internal/artifact"
 )
 
-// Load returns the active verified snapshot without checking the network. If
-// no active snapshot exists yet, it downloads and activates the latest release.
-func (client *Client) Load(ctx context.Context) (*Snapshot, error) {
+func (client *Client) load(ctx context.Context) (*Snapshot, error) {
+	snapshot, err := client.loadCachedCurrent(ctx)
+	if err == nil {
+		return snapshot, nil
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	return client.loadLatest(ctx)
+}
+
+func (client *Client) loadCachedCurrent(ctx context.Context) (*Snapshot, error) {
+	version, err := client.cache.Current(ctx)
+	if err == nil {
+		snapshot, loadErr := client.loadCachedWithLock(ctx, version)
+		if loadErr != nil {
+			return nil, loadErr
+		}
+		client.setCurrent(snapshot)
+		return snapshot, nil
+	}
+	if !errors.Is(err, ErrNoCachedData) {
+		return nil, err
+	}
 	client.mu.Lock()
 	current := client.current
 	client.mu.Unlock()
 	if current != nil {
-		return client.observe(current, nil)
+		return current, nil
 	}
-	version, err := client.cache.Current(ctx)
-	if err == nil {
-		snapshot, loadErr := client.loadCachedWithLock(ctx, version)
-		if loadErr == nil {
-			client.setCurrent(snapshot)
-			return client.observe(snapshot, nil)
-		}
-	}
-	return client.LoadLatest(ctx)
+	return nil, ErrNoCachedData
 }
 
-// LoadVersion returns a verified package version without changing the active
-// version used by Load.
-func (client *Client) LoadVersion(ctx context.Context, version string) (*Snapshot, error) {
-	if !versionPattern.MatchString(version) {
-		return nil, fmt.Errorf("modellink: invalid package version %q", version)
+func (client *Client) loadVersion(ctx context.Context, version string) (*Snapshot, error) {
+	if err := validateVersion(version); err != nil {
+		return nil, err
 	}
-	snapshot, err := client.joinFlight(ctx, "version:"+version, func(ctx context.Context) (*Snapshot, error) {
+	return client.joinFlight(ctx, "version:"+version, func(ctx context.Context) (*Snapshot, error) {
+		return client.prepareVersion(ctx, version)
+	})
+}
+
+func (client *Client) prepareVersion(ctx context.Context, version string) (*Snapshot, error) {
+	maintenance, err := client.acquireLock(ctx, "maintenance")
+	if err != nil {
+		return nil, err
+	}
+	snapshot, err := client.loadExactVersion(ctx, version)
+	if err != nil {
+		_ = maintenance.Unlock()
+		return nil, err
+	}
+	if err := client.pruneCache(ctx, version); err != nil {
+		_ = maintenance.Unlock()
+		return nil, err
+	}
+	if err := maintenance.Unlock(); err != nil {
+		return nil, err
+	}
+	return snapshot, nil
+}
+
+func (client *Client) activateVersion(ctx context.Context, version string) (*Snapshot, error) {
+	if err := validateVersion(version); err != nil {
+		return nil, err
+	}
+	return client.joinFlight(ctx, "activate:"+version, func(ctx context.Context) (*Snapshot, error) {
 		maintenance, err := client.acquireLock(ctx, "maintenance")
 		if err != nil {
 			return nil, err
 		}
-		snapshot, err := client.loadExactVersion(ctx, version)
+		snapshot, err := client.activateCachedVersion(ctx, version)
+		unlockErr := maintenance.Unlock()
 		if err != nil {
-			_ = maintenance.Unlock()
 			return nil, err
 		}
-		if err := client.pruneCache(ctx, version); err != nil {
-			_ = maintenance.Unlock()
-			return nil, err
-		}
-		if err := maintenance.Unlock(); err != nil {
-			return nil, err
+		if unlockErr != nil {
+			return nil, unlockErr
 		}
 		return snapshot, nil
 	})
-	return client.observe(snapshot, err)
+}
+
+func (client *Client) switchVersion(ctx context.Context, version string) (*Snapshot, error) {
+	if err := validateVersion(version); err != nil {
+		return nil, err
+	}
+	return client.joinFlight(ctx, "switch:"+version, func(ctx context.Context) (*Snapshot, error) {
+		return client.switchVersionOperation(ctx, version)
+	})
+}
+
+func (client *Client) switchVersionOperation(ctx context.Context, version string) (*Snapshot, error) {
+	maintenance, err := client.acquireLock(ctx, "maintenance")
+	if err != nil {
+		return nil, err
+	}
+	snapshot, err := client.loadExactVersion(ctx, version)
+	if err != nil {
+		_ = maintenance.Unlock()
+		return nil, err
+	}
+	if err := client.pruneCache(ctx, version); err != nil {
+		_ = maintenance.Unlock()
+		return nil, err
+	}
+	snapshot, err = client.activateCachedVersion(ctx, version)
+	unlockErr := maintenance.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	if unlockErr != nil {
+		return nil, unlockErr
+	}
+	return snapshot, nil
+}
+
+func (client *Client) activateCachedVersion(ctx context.Context, version string) (*Snapshot, error) {
+	lock, err := client.acquireLock(ctx, "version:"+version)
+	if err != nil {
+		return nil, err
+	}
+	snapshot, loadErr := client.loadCached(ctx, version)
+	if loadErr == nil {
+		loadErr = client.cache.SetCurrent(ctx, version)
+	}
+	unlockErr := lock.Unlock()
+	if loadErr != nil {
+		return nil, loadErr
+	}
+	if unlockErr != nil {
+		return nil, unlockErr
+	}
+	client.setCurrent(snapshot)
+	return snapshot, nil
 }
 
 func (client *Client) loadExactVersion(ctx context.Context, version string) (*Snapshot, error) {
@@ -70,18 +158,6 @@ func (client *Client) loadExactVersion(ctx context.Context, version string) (*Sn
 	}
 	if release.Version != version {
 		return nil, fmt.Errorf("modellink: registry resolved %q as %q", version, release.Version)
-	}
-	return client.downloadAndStore(ctx, release)
-}
-
-func (client *Client) loadResolvedVersion(ctx context.Context, release artifact.Release) (*Snapshot, error) {
-	lock, err := client.acquireLock(ctx, "version:"+release.Version)
-	if err != nil {
-		return nil, err
-	}
-	defer lock.Unlock()
-	if snapshot, err := client.loadCached(ctx, release.Version); err == nil {
-		return snapshot, nil
 	}
 	return client.downloadAndStore(ctx, release)
 }
@@ -131,17 +207,31 @@ func (client *Client) loadCached(ctx context.Context, version string) (*Snapshot
 	return snapshot, nil
 }
 
-func (client *Client) currentVersion() string {
+func (client *Client) readCurrentVersion(ctx context.Context) (string, error) {
+	version, err := client.cache.Current(ctx)
+	if err == nil {
+		return version, nil
+	}
+	if !errors.Is(err, ErrNoCachedData) {
+		return "", err
+	}
 	client.mu.Lock()
 	defer client.mu.Unlock()
-	if client.current == nil {
-		return ""
+	if client.current != nil {
+		return client.current.Manifest.Version, nil
 	}
-	return client.current.Manifest.Version
+	return "", ErrNoCachedData
 }
 
 func (client *Client) setCurrent(snapshot *Snapshot) {
 	client.mu.Lock()
 	client.current = snapshot
 	client.mu.Unlock()
+}
+
+func validateVersion(version string) error {
+	if !versionPattern.MatchString(version) {
+		return fmt.Errorf("modellink: invalid package version %q", version)
+	}
+	return nil
 }

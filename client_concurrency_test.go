@@ -73,6 +73,66 @@ func TestConcurrentLoadLatestDownloadsOnce(t *testing.T) {
 	}
 }
 
+func TestLoadLatestPreventsRegistryDowngrade(t *testing.T) {
+	registry := newTestRegistry(t, "2.0.0", map[string]int{
+		"1.0.0": 1,
+		"2.0.0": 1,
+	})
+	var mutex sync.Mutex
+	var warnings []Warning
+	client, err := New(Options{
+		Registry: registry.server.URL,
+		Cache:    mustFileCache(t, t.TempDir()),
+		OnWarning: func(warning Warning) {
+			mutex.Lock()
+			warnings = append(warnings, warning)
+			mutex.Unlock()
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	active, err := client.LoadLatest(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if active.Manifest.Version != "2.0.0" {
+		t.Fatal("initial latest version was not activated")
+	}
+	downloadsBefore := registry.downloads.Load()
+	registry.latest.Store("1.0.0")
+
+	status, err := client.CheckLatest(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.UpdateAvailable || !status.RegistryBehind ||
+		status.CurrentVersion != "2.0.0" || status.LatestVersion != "1.0.0" {
+		t.Fatalf("unexpected behind status: %+v", status)
+	}
+	loaded, err := client.LoadLatest(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Manifest.Version != "2.0.0" {
+		t.Fatalf("LoadLatest downgraded to %q", loaded.Manifest.Version)
+	}
+	if registry.downloads.Load() != downloadsBefore {
+		t.Fatal("LoadLatest downloaded the registry's older version")
+	}
+	mutex.Lock()
+	defer mutex.Unlock()
+	var behind []Warning
+	for _, warning := range warnings {
+		if warning.Code == WarningRegistryBehind {
+			behind = append(behind, warning)
+		}
+	}
+	if len(behind) != 1 || behind[0].CurrentVersion != "2.0.0" || behind[0].RegistryVersion != "1.0.0" {
+		t.Fatalf("registry warning is incomplete: %+v", behind)
+	}
+}
+
 func TestIndependentClientsShareFileCacheAndDownloadOnce(t *testing.T) {
 	registry := newTestRegistry(t, "1.2.3", map[string]int{"1.2.3": 1})
 	directory := t.TempDir()

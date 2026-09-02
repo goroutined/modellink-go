@@ -9,33 +9,36 @@ import (
 	"github.com/goroutined/modellink-go/internal/artifact"
 )
 
-// Latest queries the registry without downloading the package.
-func (client *Client) Latest(ctx context.Context) (Release, error) {
+func (client *Client) findLatest(ctx context.Context) (string, error) {
 	release, err := client.resolver.Resolve(ctx, "latest")
 	if err != nil {
-		return Release{}, err
+		return "", err
 	}
-	return publicRelease(release), nil
+	if err := validateVersion(release.Version); err != nil {
+		return "", err
+	}
+	return release.Version, nil
 }
 
-// CheckLatest compares the active version with the registry latest version.
-func (client *Client) CheckLatest(ctx context.Context) (UpdateStatus, error) {
-	release, err := client.Latest(ctx)
+func (client *Client) checkLatest(ctx context.Context) (UpdateStatus, error) {
+	latest, err := client.findLatest(ctx)
 	if err != nil {
 		return UpdateStatus{}, err
 	}
-	current := client.currentVersion()
-	if current == "" {
-		current, _ = client.cache.Current(ctx)
+	current, err := client.readCurrentVersion(ctx)
+	if errors.Is(err, ErrNoCachedData) {
+		return UpdateStatus{LatestVersion: latest, UpdateAvailable: true}, nil
 	}
-	return UpdateStatus{CurrentVersion: current, LatestVersion: release.Version, UpdateAvailable: current != release.Version}, nil
-}
-
-// LoadLatest checks the configured registry, downloads the latest release when
-// necessary, and atomically makes it the active snapshot.
-func (client *Client) LoadLatest(ctx context.Context) (*Snapshot, error) {
-	snapshot, err := client.joinFlight(ctx, "latest", client.updateLatest)
-	return client.observe(snapshot, err)
+	if err != nil {
+		return UpdateStatus{}, err
+	}
+	comparison := comparePackageVersions(latest, current)
+	return UpdateStatus{
+		CurrentVersion:  current,
+		LatestVersion:   latest,
+		UpdateAvailable: comparison > 0,
+		RegistryBehind:  comparison < 0,
+	}, nil
 }
 
 func (client *Client) joinFlight(ctx context.Context, key string, operation func(context.Context) (*Snapshot, error)) (*Snapshot, error) {
@@ -67,48 +70,25 @@ func (client *Client) runFlight(key string, ongoing *flight, operation func(cont
 	client.mu.Unlock()
 }
 
-func (client *Client) updateLatest(ctx context.Context) (*Snapshot, error) {
+func (client *Client) loadLatest(ctx context.Context) (*Snapshot, error) {
+	return client.joinFlight(ctx, "latest", client.loadLatestOperation)
+}
+
+func (client *Client) loadLatestOperation(ctx context.Context) (*Snapshot, error) {
 	lock, err := client.acquireLock(ctx, "latest")
 	if err != nil {
 		return nil, err
 	}
 	defer lock.Unlock()
-	release, err := client.resolver.Resolve(ctx, "latest")
+	status, err := client.checkLatest(ctx)
 	if err != nil {
 		return nil, err
 	}
-	maintenance, err := client.acquireLock(ctx, "maintenance")
-	if err != nil {
-		return nil, err
+	if status.RegistryBehind {
+		client.notifyWarning(registryBehindWarning(status.CurrentVersion, status.LatestVersion))
+		return client.loadCachedCurrent(ctx)
 	}
-	snapshot, err := client.loadResolvedVersion(ctx, release)
-	if err != nil {
-		_ = maintenance.Unlock()
-		return nil, err
-	}
-	if err := client.pruneCache(ctx, snapshot.Manifest.Version); err != nil {
-		_ = maintenance.Unlock()
-		return nil, err
-	}
-	activationLock, err := client.acquireLock(ctx, "version:"+snapshot.Manifest.Version)
-	if err != nil {
-		_ = maintenance.Unlock()
-		return nil, err
-	}
-	if err := client.cache.SetCurrent(ctx, snapshot.Manifest.Version); err != nil {
-		_ = activationLock.Unlock()
-		_ = maintenance.Unlock()
-		return nil, err
-	}
-	if err := activationLock.Unlock(); err != nil {
-		_ = maintenance.Unlock()
-		return nil, err
-	}
-	if err := maintenance.Unlock(); err != nil {
-		return nil, err
-	}
-	client.setCurrent(snapshot)
-	return snapshot, nil
+	return client.switchVersionOperation(ctx, status.LatestVersion)
 }
 
 func (client *Client) pruneCache(ctx context.Context, protected ...string) error {
@@ -168,10 +148,6 @@ func snapshotFromPackage(pkg *artifact.Package) (*Snapshot, error) {
 		files:    snapshotFiles(pkg.Files),
 		warnings: schemaWarnings(manifest),
 	}, nil
-}
-
-func publicRelease(release artifact.Release) Release {
-	return Release{Version: release.Version, Tarball: release.Tarball, Integrity: release.Integrity}
 }
 
 func snapshotFiles(files map[string][]byte) map[DataFile][]byte {

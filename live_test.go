@@ -21,7 +21,7 @@ func TestLivePackage(t *testing.T) {
 	if len(snapshot.Catalog.Models) == 0 || len(snapshot.Catalog.Providers) == 0 {
 		t.Fatal("public catalog is empty")
 	}
-	if _, ok := snapshot.Offering("deepseek", "deepseek-v4-pro"); !ok {
+	if _, ok := snapshot.ProviderModel("deepseek", "deepseek-v4-pro"); !ok {
 		t.Fatal("expected DeepSeek offering is missing")
 	}
 }

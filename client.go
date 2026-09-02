@@ -45,18 +45,12 @@ type Client struct {
 	warned    map[string]struct{}
 }
 
-// Release describes one published @modellink/data package.
-type Release struct {
-	Version   string
-	Tarball   string
-	Integrity string
-}
-
 // UpdateStatus compares the active snapshot with the registry latest version.
 type UpdateStatus struct {
 	CurrentVersion  string
 	LatestVersion   string
 	UpdateAvailable bool
+	RegistryBehind  bool
 }
 
 type flight struct {
@@ -101,19 +95,23 @@ func (client *Client) observe(snapshot *Snapshot, err error) (*Snapshot, error) 
 }
 
 func (client *Client) notifyWarnings(snapshot *Snapshot) {
+	for _, warning := range snapshot.warnings {
+		client.notifyWarning(warning)
+	}
+}
+
+func (client *Client) notifyWarning(warning Warning) {
 	if client.onWarning == nil {
 		return
 	}
-	for _, warning := range snapshot.warnings {
-		key := string(warning.Code) + "\x00" + warning.DataPackageVersion + "\x00" + warning.DataSchemaSHA256
-		client.mu.Lock()
-		_, seen := client.warned[key]
-		if !seen {
-			client.warned[key] = struct{}{}
-		}
-		client.mu.Unlock()
-		if !seen {
-			client.onWarning(warning)
-		}
+	key := warning.key()
+	client.mu.Lock()
+	_, seen := client.warned[key]
+	if !seen {
+		client.warned[key] = struct{}{}
+	}
+	client.mu.Unlock()
+	if !seen {
+		client.onWarning(warning)
 	}
 }

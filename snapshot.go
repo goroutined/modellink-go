@@ -44,6 +44,7 @@ func (snapshot *Snapshot) Warnings() []Warning {
 	return append([]Warning(nil), snapshot.warnings...)
 }
 
+// Model returns canonical base-model metadata by its globally unique ID.
 func (snapshot *Snapshot) Model(id string) (ModelMetadata, bool) {
 	if snapshot == nil {
 		return ModelMetadata{}, false
@@ -52,6 +53,7 @@ func (snapshot *Snapshot) Model(id string) (ModelMetadata, bool) {
 	return model, ok
 }
 
+// Provider returns a provider and all of its callable models.
 func (snapshot *Snapshot) Provider(id string) (Provider, bool) {
 	if snapshot == nil {
 		return Provider{}, false
@@ -60,7 +62,9 @@ func (snapshot *Snapshot) Provider(id string) (Provider, bool) {
 	return provider, ok
 }
 
-func (snapshot *Snapshot) Offering(
+// ProviderModel returns one concrete model offered by a provider. modelID is
+// the provider's callable model identifier.
+func (snapshot *Snapshot) ProviderModel(
 	providerID string,
 	modelID string,
 ) (ProviderModel, bool) {
