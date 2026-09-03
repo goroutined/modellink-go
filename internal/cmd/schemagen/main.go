@@ -49,8 +49,9 @@ func main() {
 		"modellink",
 		"--output",
 		generated,
-		filepath.Join(root, "schema", "schema.json"),
+		schemaArgument(),
 	)
+	command.Dir = root
 	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr
 	check(command.Run())
@@ -68,6 +69,14 @@ func main() {
 	var output bytes.Buffer
 	check(format.Node(&output, files, parsed))
 	check(atomicfile.Write(filepath.Join(root, "zz_types_generated.go"), output.Bytes(), 0o644))
+}
+
+// go-jsonschema parses its schema argument as a URL before treating it as a
+// file. A Windows absolute path such as C:\\... is therefore misread as an
+// unsupported URL scheme. Keep the argument relative and anchor it with
+// command.Dir instead.
+func schemaArgument() string {
+	return filepath.Join("schema", "schema.json")
 }
 
 func replaceStructField(
