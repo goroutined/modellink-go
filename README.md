@@ -422,7 +422,8 @@ go run ./internal/cmd/schemasync -version 0.1.3
 go run ./internal/cmd/schemasync -registry https://registry.npmmirror.com
 ```
 
-CI 会强制检查已提交 Schema 与生成代码是否一致，但 npm 出现更新时只给出提示，不阻止 Pull Request：
+CI 会强制检查已提交 Schema 与生成代码是否一致。npm 最新数据包中的 Schema
+版本或内容发生变化时只给出提示，不阻止 Pull Request；仅模型数据更新不会触发提示：
 
 ```bash
 go run ./internal/cmd/schemacheck

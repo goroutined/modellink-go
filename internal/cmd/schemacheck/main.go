@@ -25,12 +25,10 @@ func main() {
 	check(err)
 	contents, err := os.ReadFile(filepath.Join(root, "schema", "schema.lock.json"))
 	check(err)
-	var lock struct {
-		PackageVersion string `json:"package_version"`
-	}
+	var lock schemaLock
 	check(json.Unmarshal(contents, &lock))
-	if lock.PackageVersion == "" {
-		check(fmt.Errorf("schema lock has no package_version"))
+	if lock.PackageVersion == "" || lock.SchemaVersion < 1 || lock.SchemaSHA256 == "" {
+		check(fmt.Errorf("schema lock is incomplete"))
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -41,20 +39,51 @@ func main() {
 	}
 	release, err := resolver.Resolve(ctx, "latest")
 	check(err)
-	if release.Version == lock.PackageVersion {
-		fmt.Printf("schema is current at @modellink/data %s\n", release.Version)
+	pkg, err := resolver.Download(ctx, release)
+	check(err)
+	if schemasMatch(lock, pkg.Manifest) {
+		fmt.Printf(
+			"schema v%d is current; latest @modellink/data is %s\n",
+			lock.SchemaVersion,
+			release.Version,
+		)
 		return
 	}
+	latestSchema := pkg.Manifest.Files["schema.json"]
 	message := fmt.Sprintf(
-		"ModelLink schema is based on @modellink/data %s; latest is %s; run `go run ./internal/cmd/schemasync` and `go generate ./...` when ready",
+		"ModelLink schema changed from v%d (%s, @modellink/data %s) to v%d (%s, @modellink/data %s); run `go run ./internal/cmd/schemasync` and `go generate ./...` when ready",
+		lock.SchemaVersion,
+		shortHash(lock.SchemaSHA256),
 		lock.PackageVersion,
-		release.Version,
+		pkg.Manifest.SchemaVersion,
+		shortHash(latestSchema.SHA256),
+		pkg.Manifest.Version,
 	)
 	if os.Getenv("GITHUB_ACTIONS") == "true" {
 		fmt.Printf("::warning title=ModelLink schema update available::%s\n", message)
 	} else {
 		fmt.Println(message)
 	}
+}
+
+type schemaLock struct {
+	PackageVersion string `json:"package_version"`
+	SchemaVersion  int    `json:"schema_version"`
+	SchemaSHA256   string `json:"schema_sha256"`
+}
+
+func schemasMatch(lock schemaLock, manifest artifact.Manifest) bool {
+	latest, ok := manifest.Files["schema.json"]
+	return ok &&
+		lock.SchemaVersion == manifest.SchemaVersion &&
+		lock.SchemaSHA256 == latest.SHA256
+}
+
+func shortHash(hash string) string {
+	if len(hash) <= 12 {
+		return hash
+	}
+	return hash[:12]
 }
 
 func check(err error) {
