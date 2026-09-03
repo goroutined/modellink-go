@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+
+	"github.com/goroutined/modellink-go/internal/atomicfile"
 )
 
 const generatorVersion = "v0.22.0"
@@ -65,7 +67,7 @@ func main() {
 
 	var output bytes.Buffer
 	check(format.Node(&output, files, parsed))
-	check(writeAtomic(filepath.Join(root, "zz_types_generated.go"), output.Bytes()))
+	check(atomicfile.Write(filepath.Join(root, "zz_types_generated.go"), output.Bytes(), 0o644))
 }
 
 func replaceStructField(
@@ -98,27 +100,6 @@ func replaceStructField(
 		}
 	}
 	return fmt.Errorf("struct %s was not generated", structName)
-}
-
-func writeAtomic(name string, contents []byte) error {
-	temporary, err := os.CreateTemp(filepath.Dir(name), ".generated-*")
-	if err != nil {
-		return err
-	}
-	temporaryName := temporary.Name()
-	defer os.Remove(temporaryName)
-	if err := temporary.Chmod(0o644); err != nil {
-		temporary.Close()
-		return err
-	}
-	if _, err := temporary.Write(contents); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	return os.Rename(temporaryName, name)
 }
 
 func check(err error) {

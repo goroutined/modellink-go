@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/goroutined/modellink-go/internal/artifact"
+	"github.com/goroutined/modellink-go/internal/atomicfile"
 )
 
 func main() {
@@ -53,39 +54,14 @@ func main() {
 
 	directory := filepath.Join(root, "schema")
 	check(os.MkdirAll(directory, 0o755))
-	check(writeAtomic(filepath.Join(directory, "schema.json"), pkg.Files["schema.json"]))
-	check(writeAtomic(filepath.Join(directory, "schema.lock.json"), lockJSON))
+	check(atomicfile.Write(filepath.Join(directory, "schema.json"), pkg.Files["schema.json"], 0o644))
+	check(atomicfile.Write(filepath.Join(directory, "schema.lock.json"), lockJSON, 0o644))
 	fmt.Printf(
 		"synced %s %s (schema version %d)\n",
 		artifact.PackageName,
 		pkg.Manifest.Version,
 		pkg.Manifest.SchemaVersion,
 	)
-}
-
-func writeAtomic(name string, contents []byte) error {
-	temporary, err := os.CreateTemp(filepath.Dir(name), ".schema-*")
-	if err != nil {
-		return err
-	}
-	temporaryName := temporary.Name()
-	defer os.Remove(temporaryName)
-	if err := temporary.Chmod(0o644); err != nil {
-		temporary.Close()
-		return err
-	}
-	if _, err := temporary.Write(contents); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Sync(); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	return os.Rename(temporaryName, name)
 }
 
 func check(err error) {

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/goroutined/modellink-go/internal/artifact"
+	"github.com/goroutined/modellink-go/internal/atomicfile"
 )
 
 var cachedFiles = []string{
@@ -179,28 +180,7 @@ func (cache *FileCache) SetCurrent(ctx context.Context, version string) error {
 		return err
 	}
 	contents = append(contents, '\n')
-	temporary, err := os.CreateTemp(cache.directory, ".current-*")
-	if err != nil {
-		return fmt.Errorf("modellink: create current version file: %w", err)
-	}
-	temporaryName := temporary.Name()
-	defer os.Remove(temporaryName)
-	if err := temporary.Chmod(0o600); err != nil {
-		temporary.Close()
-		return err
-	}
-	if _, err := temporary.Write(contents); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Sync(); err != nil {
-		temporary.Close()
-		return err
-	}
-	if err := temporary.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(temporaryName, filepath.Join(cache.directory, "current.json")); err != nil {
+	if err := atomicfile.Write(filepath.Join(cache.directory, "current.json"), contents, 0o600); err != nil {
 		return fmt.Errorf("modellink: update current version: %w", err)
 	}
 	return nil
