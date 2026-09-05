@@ -488,6 +488,9 @@ type Provider struct {
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 
+	// Purpose-specific official links for integrating with this provider.
+	Links *ProviderLinks `json:"links,omitempty"`
+
 	// Models corresponds to the JSON schema field "models".
 	Models ProviderModels `json:"models"`
 
@@ -528,6 +531,21 @@ type ProviderEndpoint struct {
 
 	// Protocol corresponds to the JSON schema field "protocol".
 	Protocol Protocol `json:"protocol"`
+}
+
+// Purpose-specific official links for integrating with this provider.
+type ProviderLinks struct {
+	// Official instructions for applying for and configuring an API key.
+	APIKey *string `json:"api_key,omitempty"`
+
+	// Official console used to manage API keys and the provider account.
+	Console *string `json:"console,omitempty"`
+
+	// Official catalog of models available from this provider.
+	Models *string `json:"models,omitempty"`
+
+	// Official pricing, subscription plan, or purchase page.
+	Pricing *string `json:"pricing,omitempty"`
 }
 
 type ProviderModel struct {

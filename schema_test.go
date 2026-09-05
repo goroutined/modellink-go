@@ -57,3 +57,37 @@ func TestOptionalBooleanKeepsUnknownFalseAndTrueDistinct(t *testing.T) {
 func boolPointer(value bool) *bool {
 	return &value
 }
+
+func TestProviderLinksPreserveOptionalFields(t *testing.T) {
+	var legacy Provider
+	if err := json.Unmarshal([]byte(`{"id":"example"}`), &legacy); err != nil {
+		t.Fatal(err)
+	}
+	if legacy.Links != nil {
+		t.Fatal("missing links must remain nil for older data")
+	}
+	var provider Provider
+	if err := json.Unmarshal([]byte(`{"links":{"models":"https://example.com/models","pricing":"https://example.com/pricing","api_key":"https://example.com/quickstart","console":"https://example.com/console"}}`), &provider); err != nil {
+		t.Fatal(err)
+	}
+	if provider.Links == nil {
+		t.Fatal("provider links were not decoded")
+	}
+	for want, actual := range map[string]*string{
+		"https://example.com/models":     provider.Links.Models,
+		"https://example.com/pricing":    provider.Links.Pricing,
+		"https://example.com/quickstart": provider.Links.APIKey,
+		"https://example.com/console":    provider.Links.Console,
+	} {
+		if actual == nil || *actual != want {
+			t.Fatalf("link %v, want %q", actual, want)
+		}
+	}
+	var partial Provider
+	if err := json.Unmarshal([]byte(`{"links":{"models":"https://example.com/models"}}`), &partial); err != nil {
+		t.Fatal(err)
+	}
+	if partial.Links == nil || partial.Links.APIKey != nil || partial.Links.Pricing != nil || partial.Links.Console != nil {
+		t.Fatal("missing purpose-specific links must remain nil")
+	}
+}

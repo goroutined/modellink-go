@@ -269,7 +269,7 @@ func TestActivateAndSwitchVersion(t *testing.T) {
 }
 
 func TestUnsupportedSchemaIsNotActivated(t *testing.T) {
-	registry := newTestRegistry(t, "2.0.0", map[string]int{"2.0.0": 2})
+	registry := newTestRegistry(t, "2.0.0", map[string]int{"2.0.0": SupportedSchemaVersion + 1})
 	client, err := New(Options{
 		Registry: registry.server.URL,
 		Cache:    mustFileCache(t, t.TempDir()),

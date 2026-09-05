@@ -1,7 +1,7 @@
 {
   "package": "@modellink/data",
-  "package_version": "0.1.4",
-  "schema_version": 1,
-  "schema_sha256": "6e1b63c5abc9dc197512fdcc5db60f2a56d911d166134c2b45883e942e4dfd24",
-  "source_revision": "8c73b3d19f4e37b99e8c49082c3d4eeb822390ce"
+  "package_version": "0.2.1",
+  "schema_version": 2,
+  "schema_sha256": "3f0d8a52901e4073bde683134b5957831ed2b5560ed96dfa69596b927224e568",
+  "source_revision": "5a27022c958931a461184270cdace746ba2ec530"
 }

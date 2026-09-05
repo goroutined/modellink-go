@@ -393,6 +393,11 @@ model.Temperature != nil && *model.Temperature  // 明确支持调节
 
 ## Schema 与代码生成
 
+当前内嵌 Schema v2，来源于 `@modellink/data 0.2.1`，同时兼容 Schema v1 数据。
+Provider 的可选 `Links` 提供 `Models`（模型目录）、`Pricing`（价格/套餐）、
+`APIKey`（申请和接入指引）、`Console`（管理后台）。使用前检查 `provider.Links != nil`
+及具体字段是否为 `nil`；旧数据或未提供的入口保持缺省。原 `Doc` 文档入口仍保留。
+
 仓库保存了生成依据：
 
 ```text
