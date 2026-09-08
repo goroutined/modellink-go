@@ -7,9 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/goroutined/modellink-go/internal/artifact"
-	"github.com/goroutined/modellink-go/internal/atomicfile"
+	"github.com/goroutined/modellink-go/internal/trace"
 )
 
 var cachedFiles = []string{
@@ -70,26 +71,14 @@ func (cache *FileCache) Directory() string {
 }
 
 func (cache *FileCache) Current(ctx context.Context) (string, error) {
-	if err := ctx.Err(); err != nil {
+	state, err := cache.State(ctx)
+	if err != nil {
 		return "", err
 	}
-	contents, err := os.ReadFile(filepath.Join(cache.directory, "current.json"))
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return "", ErrNoCachedData
-		}
-		return "", fmt.Errorf("modellink: read current cache version: %w", err)
+	if state.Version == "" {
+		return "", ErrNoCachedData
 	}
-	var current struct {
-		Version string `json:"version"`
-	}
-	if err := json.Unmarshal(contents, &current); err != nil {
-		return "", fmt.Errorf("modellink: decode current cache version: %w", err)
-	}
-	if !versionPattern.MatchString(current.Version) {
-		return "", errors.New("modellink: current cache version is invalid")
-	}
-	return current.Version, nil
+	return state.Version, nil
 }
 
 func (cache *FileCache) Get(ctx context.Context, version string) (*CacheEntry, error) {
@@ -112,7 +101,10 @@ func (cache *FileCache) Get(ctx context.Context, version string) (*CacheEntry, e
 		files[DataFile(name)] = contents
 	}
 	entry := &CacheEntry{Version: version, Files: files}
-	if _, err := packageFromEntry(entry); err != nil {
+	_, verifyEnd := trace.Start(ctx, "verify")
+	_, verifyErr := packageFromEntry(entry)
+	verifyEnd()
+	if err := verifyErr; err != nil {
 		return nil, err
 	}
 	return entry, nil
@@ -122,7 +114,9 @@ func (cache *FileCache) Put(ctx context.Context, entry *CacheEntry) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	_, verifyEnd := trace.Start(ctx, "verify")
 	pkg, err := packageFromEntry(entry)
+	verifyEnd()
 	if err != nil {
 		return err
 	}
@@ -167,23 +161,18 @@ func (cache *FileCache) SetCurrent(ctx context.Context, version string) error {
 	if !versionPattern.MatchString(version) {
 		return fmt.Errorf("modellink: invalid current version %q", version)
 	}
-	if _, err := cache.Get(ctx, version); err != nil {
+	readCtx, readEnd := trace.Start(ctx, "cache_read")
+	_, readErr := cache.Get(readCtx, version)
+	readEnd()
+	if err := readErr; err != nil {
 		return fmt.Errorf("modellink: activate unavailable version %q: %w", version, err)
 	}
-	if err := os.MkdirAll(cache.directory, 0o700); err != nil {
-		return fmt.Errorf("modellink: create cache directory: %w", err)
-	}
-	contents, err := json.Marshal(struct {
-		Version string `json:"version"`
-	}{Version: version})
-	if err != nil {
-		return err
-	}
-	contents = append(contents, '\n')
-	if err := atomicfile.Write(filepath.Join(cache.directory, "current.json"), contents, 0o600); err != nil {
-		return fmt.Errorf("modellink: update current version: %w", err)
-	}
-	return nil
+	return cache.changeState(ctx, func(state *CacheState) {
+		if state.Version != version {
+			state.LastUpdate = &UpdateState{UpdatedAt: time.Now().UTC(), PreviousVersion: state.Version, CurrentVersion: version}
+			state.Version = version
+		}
+	})
 }
 
 func packageFromEntry(entry *CacheEntry) (*artifact.Package, error) {

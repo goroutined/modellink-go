@@ -5,32 +5,51 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/goroutined/modellink-go/internal/artifact"
+	"github.com/goroutined/modellink-go/internal/trace"
 )
 
 func (client *Client) findLatest(ctx context.Context) (string, error) {
+	check, err := client.findLatestCheck(ctx)
+	return check.LatestVersion, err
+}
+
+func (client *Client) findLatestCheck(ctx context.Context) (CheckState, error) {
 	release, err := client.resolver.Resolve(ctx, "latest")
 	if err != nil {
-		return "", err
+		return CheckState{}, err
 	}
 	if err := validateVersion(release.Version); err != nil {
-		return "", err
+		return CheckState{}, err
 	}
-	return release.Version, nil
+	registry := strings.TrimRight(client.resolver.Registry, "/")
+	if registry == "" {
+		registry = artifact.DefaultRegistry
+	}
+	check := CheckState{CheckedAt: time.Now().UTC(), LatestVersion: release.Version, Registry: registry}
+	ctx, end := trace.Start(ctx, "cache_write")
+	defer end()
+	if err := client.cache.RecordCheck(ctx, check); err != nil {
+		return check, fmt.Errorf("modellink: persist latest check: %w", err)
+	}
+	return check, nil
 }
 
 func (client *Client) checkLatest(ctx context.Context) (UpdateStatus, error) {
-	latest, err := client.findLatest(ctx)
+	check, err := client.findLatestCheck(ctx)
+	latest := check.LatestVersion
 	if err != nil {
-		return UpdateStatus{}, err
+		return UpdateStatus{LatestVersion: latest, CheckedAt: check.CheckedAt}, err
 	}
 	current, err := client.readCurrentVersion(ctx)
 	if errors.Is(err, ErrNoCachedData) {
-		return UpdateStatus{LatestVersion: latest, UpdateAvailable: true}, nil
+		return UpdateStatus{LatestVersion: latest, CheckedAt: check.CheckedAt, UpdateAvailable: true}, nil
 	}
 	if err != nil {
-		return UpdateStatus{}, err
+		return UpdateStatus{LatestVersion: latest, CheckedAt: check.CheckedAt}, err
 	}
 	comparison := comparePackageVersions(latest, current)
 	return UpdateStatus{
@@ -38,6 +57,7 @@ func (client *Client) checkLatest(ctx context.Context) (UpdateStatus, error) {
 		LatestVersion:   latest,
 		UpdateAvailable: comparison > 0,
 		RegistryBehind:  comparison < 0,
+		CheckedAt:       check.CheckedAt,
 	}, nil
 }
 
@@ -47,7 +67,14 @@ func (client *Client) joinFlight(ctx context.Context, key string, operation func
 	if ongoing == nil {
 		ongoing = &flight{done: make(chan struct{})}
 		client.flights[key] = ongoing
-		go client.runFlight(key, ongoing, operation)
+		if scope, _ := ctx.Value(operationKey{}).(*operationScope); scope != nil {
+			scope.delegated.Store(true)
+		}
+		go client.runFlight(ctx, key, ongoing, operation)
+	} else {
+		var end func()
+		ctx, end = trace.Start(ctx, "shared_wait")
+		defer end()
 	}
 	ongoing.waiters++
 	client.mu.Unlock()
@@ -59,8 +86,8 @@ func (client *Client) joinFlight(ctx context.Context, key string, operation func
 	}
 }
 
-func (client *Client) runFlight(key string, ongoing *flight, operation func(context.Context) (*Snapshot, error)) {
-	ctx, cancel := context.WithTimeout(context.Background(), client.operationTimeout)
+func (client *Client) runFlight(parent context.Context, key string, ongoing *flight, operation func(context.Context) (*Snapshot, error)) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), client.operationTimeout)
 	defer cancel()
 	snapshot, err := operation(ctx)
 	client.mu.Lock()
@@ -68,6 +95,9 @@ func (client *Client) runFlight(key string, ongoing *flight, operation func(cont
 	delete(client.flights, key)
 	close(ongoing.done)
 	client.mu.Unlock()
+	if scope, _ := ctx.Value(operationKey{}).(*operationScope); scope != nil {
+		scope.finish(err)
+	}
 }
 
 func (client *Client) loadLatest(ctx context.Context) (*Snapshot, error) {
@@ -96,6 +126,8 @@ func (client *Client) pruneCache(ctx context.Context, protected ...string) error
 	if !ok {
 		return nil
 	}
+	ctx, end := trace.Start(ctx, "prune")
+	defer end()
 	return pruner.Prune(ctx, protected...)
 }
 
@@ -104,11 +136,16 @@ func (client *Client) downloadAndStore(ctx context.Context, release artifact.Rel
 	if err != nil {
 		return nil, err
 	}
+	_, verifyEnd := trace.Start(ctx, "verify")
 	snapshot, err := snapshotFromPackage(pkg)
+	verifyEnd()
 	if err != nil {
 		return nil, err
 	}
-	if err := client.cache.Put(ctx, entryFromPackage(pkg)); err != nil {
+	writeCtx, writeEnd := trace.Start(ctx, "cache_write")
+	writeErr := client.cache.Put(writeCtx, entryFromPackage(pkg))
+	writeEnd()
+	if err := writeErr; err != nil {
 		return nil, err
 	}
 	client.mu.Lock()
@@ -118,6 +155,8 @@ func (client *Client) downloadAndStore(ctx context.Context, release artifact.Rel
 }
 
 func (client *Client) acquireLock(ctx context.Context, key string) (Lock, error) {
+	ctx, end := trace.Start(ctx, "lock_wait")
+	defer end()
 	lockContext, cancel := context.WithTimeout(ctx, client.lockTimeout)
 	defer cancel()
 	lock, err := client.cache.Lock(lockContext, key)

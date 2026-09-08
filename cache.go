@@ -3,6 +3,7 @@ package modellink
 import (
 	"context"
 	"errors"
+	"time"
 )
 
 // CacheEntry is one immutable, versioned ModelLink data package. Files contain
@@ -18,7 +19,37 @@ type CacheStore interface {
 	Current(ctx context.Context) (string, error)
 	Get(ctx context.Context, version string) (*CacheEntry, error)
 	Put(ctx context.Context, entry *CacheEntry) error
+	// SetCurrent must atomically update Version and LastUpdate, preserving
+	// LastCheck. Same-version activation must preserve LastUpdate. Implementations
+	// coordinate metadata writes internally (callers can hold version locks).
 	SetCurrent(ctx context.Context, version string) error
+	// State returns durable metadata; a new cache returns an empty state.
+	State(ctx context.Context) (CacheState, error)
+	// RecordCheck merges a successful latest lookup without overwriting activation.
+	// Older CheckedAt values must not replace newer records.
+	RecordCheck(ctx context.Context, check CheckState) error
+}
+
+// CheckState records a successful latest lookup, not a successful download.
+type CheckState struct {
+	CheckedAt     time.Time `json:"checked_at"`
+	LatestVersion string    `json:"latest_version"`
+	Registry      string    `json:"registry"`
+}
+
+// UpdateState records the last actual change of the shared active pointer.
+type UpdateState struct {
+	UpdatedAt       time.Time `json:"updated_at"`
+	PreviousVersion string    `json:"previous_version"`
+	CurrentVersion  string    `json:"current_version"`
+}
+
+// CacheState survives process restarts. Nil records mean no known event.
+// Version uses the legacy current.json field for backwards-readable storage.
+type CacheState struct {
+	Version    string       `json:"version,omitempty"`
+	LastCheck  *CheckState  `json:"last_check,omitempty"`
+	LastUpdate *UpdateState `json:"last_update,omitempty"`
 }
 
 // Locker coordinates a complete update operation across all clients sharing a

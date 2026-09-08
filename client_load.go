@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
+	"github.com/goroutined/modellink-go/internal/trace"
 )
 
 func (client *Client) load(ctx context.Context) (*Snapshot, error) {
@@ -18,7 +20,9 @@ func (client *Client) load(ctx context.Context) (*Snapshot, error) {
 }
 
 func (client *Client) loadCachedCurrent(ctx context.Context) (*Snapshot, error) {
-	version, err := client.cache.Current(ctx)
+	readCtx, readEnd := trace.Start(ctx, "cache_read")
+	version, err := client.cache.Current(readCtx)
+	readEnd()
 	if err == nil {
 		snapshot, loadErr := client.loadCachedWithLock(ctx, version)
 		if loadErr != nil {
@@ -130,7 +134,9 @@ func (client *Client) activateCachedVersion(ctx context.Context, version string)
 	}
 	snapshot, loadErr := client.loadCached(ctx, version)
 	if loadErr == nil {
-		loadErr = client.cache.SetCurrent(ctx, version)
+		activateCtx, end := trace.Start(ctx, "activate")
+		loadErr = client.cache.SetCurrent(activateCtx, version)
+		end()
 	}
 	unlockErr := lock.Unlock()
 	if loadErr != nil {
@@ -185,10 +191,14 @@ func (client *Client) loadCached(ctx context.Context, version string) (*Snapshot
 	if snapshot != nil {
 		return snapshot, nil
 	}
-	entry, err := client.cache.Get(ctx, version)
+	readCtx, readEnd := trace.Start(ctx, "cache_read")
+	entry, err := client.cache.Get(readCtx, version)
+	readEnd()
 	if err != nil {
 		return nil, err
 	}
+	_, verifyEnd := trace.Start(ctx, "verify")
+	defer verifyEnd()
 	pkg, err := packageFromEntry(entry)
 	if err != nil {
 		return nil, err
@@ -208,6 +218,8 @@ func (client *Client) loadCached(ctx context.Context, version string) (*Snapshot
 }
 
 func (client *Client) readCurrentVersion(ctx context.Context) (string, error) {
+	ctx, end := trace.Start(ctx, "cache_read")
+	defer end()
 	version, err := client.cache.Current(ctx)
 	if err == nil {
 		return version, nil

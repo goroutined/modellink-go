@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/goroutined/modellink-go/internal/trace"
 )
 
 // Prune removes old immutable versions while preserving the active version and
@@ -66,7 +68,9 @@ func (cache *FileCache) Prune(ctx context.Context, protected ...string) error {
 			remaining--
 			continue
 		}
-		lock, err := cache.Lock(ctx, "version:"+version.version)
+		lockCtx, lockEnd := trace.Start(ctx, "lock_wait")
+		lock, err := cache.Lock(lockCtx, "version:"+version.version)
+		lockEnd()
 		if err != nil {
 			return err
 		}

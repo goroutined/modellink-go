@@ -28,6 +28,9 @@ type Options struct {
 	// OnWarning receives each distinct non-fatal warning once per Client. Nil
 	// keeps the client silent; warnings remain available from Snapshot.Warnings.
 	OnWarning func(Warning)
+	// OnOperation receives completed logical operations outside cache/client
+	// locks. Calls can be concurrent; keep the handler short and concurrency-safe.
+	OnOperation func(OperationReport)
 }
 
 // Client loads verified, versioned ModelLink snapshots.
@@ -37,12 +40,13 @@ type Client struct {
 	operationTimeout time.Duration
 	lockTimeout      time.Duration
 
-	mu        sync.Mutex
-	current   *Snapshot
-	snapshots map[string]*Snapshot
-	flights   map[string]*flight
-	onWarning func(Warning)
-	warned    map[string]struct{}
+	mu          sync.Mutex
+	current     *Snapshot
+	snapshots   map[string]*Snapshot
+	flights     map[string]*flight
+	onWarning   func(Warning)
+	warned      map[string]struct{}
+	onOperation func(OperationReport)
 }
 
 // UpdateStatus compares the active snapshot with the registry latest version.
@@ -51,6 +55,8 @@ type UpdateStatus struct {
 	LatestVersion   string
 	UpdateAvailable bool
 	RegistryBehind  bool
+	CheckedAt       time.Time
+	Duration        time.Duration
 }
 
 type flight struct {
@@ -83,6 +89,7 @@ func New(options Options) (*Client, error) {
 		snapshots:        make(map[string]*Snapshot),
 		flights:          make(map[string]*flight),
 		onWarning:        options.OnWarning,
+		onOperation:      options.OnOperation,
 		warned:           make(map[string]struct{}),
 	}, nil
 }

@@ -19,6 +19,8 @@ import (
 	"net/url"
 	"path"
 	"strings"
+
+	"github.com/goroutined/modellink-go/internal/trace"
 )
 
 const (
@@ -75,6 +77,8 @@ type Resolver struct {
 }
 
 func (r Resolver) Resolve(ctx context.Context, version string) (Release, error) {
+	ctx, end := trace.Start(ctx, "resolve")
+	defer end()
 	if version == "" {
 		return Release{}, errors.New("modellink: package version cannot be empty")
 	}
@@ -132,6 +136,14 @@ func (r Resolver) Resolve(ctx context.Context, version string) (Release, error) 
 }
 
 func (r Resolver) Download(ctx context.Context, release Release) (*Package, error) {
+	parent := ctx
+	ctx, downloadEnd := trace.Start(ctx, "download")
+	downloading := true
+	defer func() {
+		if downloading {
+			downloadEnd()
+		}
+	}()
 	client := r.HTTPClient
 	if client == nil {
 		client = http.DefaultClient
@@ -157,6 +169,11 @@ func (r Resolver) Download(ctx context.Context, release Release) (*Package, erro
 	if len(archive) > maxArchiveBytes {
 		return nil, errors.New("modellink: package archive exceeds size limit")
 	}
+	downloadEnd()
+	downloading = false
+	// Verification is separate from network transfer; use the parent context.
+	_, verifyEnd := trace.Start(parent, "verify")
+	defer verifyEnd()
 	if err := verifyIntegrity(archive, release.Integrity); err != nil {
 		return nil, err
 	}

@@ -128,6 +128,7 @@ flowchart BT
 
 ```go
 CurrentVersion(ctx context.Context) (string, error)
+Status(ctx context.Context) (modellink.CacheState, error)
 FindLatest(ctx context.Context) (string, error)
 CheckLatest(ctx context.Context) (modellink.UpdateStatus, error)
 
@@ -145,9 +146,10 @@ Load(ctx context.Context) (*modellink.Snapshot, error)
 | 方法 | Registry | 写缓存 | 修改 current | 返回内容 |
 | --- | --- | --- | --- | --- |
 | `CurrentVersion` | 否 | 否 | 否 | 当前版本号 |
-| `FindLatest` | 只查询元数据 | 否 | 否 | Registry 最新版本号 |
-| `CheckLatest` | 只查询元数据 | 否 | 否 | 版本比较状态 |
-| `ActivateVersion` | 否 | 否 | 是 | `error` |
+| `Status` | 否 | 否 | 否 | 持久化检查/切换状态 |
+| `FindLatest` | 只查询元数据 | 写检查记录 | 否 | Registry 最新版本号 |
+| `CheckLatest` | 只查询元数据 | 写检查记录 | 否 | 版本比较状态及检查时间、耗时 |
+| `ActivateVersion` | 否 | 写激活元数据 | 是（版本不同时） | `error` |
 | `SwitchVersion` | 缓存未命中时访问 | 可能 | 是 | `error` |
 | `LoadCached` | 否 | 否 | 否 | 当前 Snapshot |
 | `LoadVersion` | 缓存未命中时访问 | 可能 | 否 | 指定版本 Snapshot |
@@ -157,6 +159,8 @@ Load(ctx context.Context) (*modellink.Snapshot, error)
 `LoadCached` 是本地只读调用，不发生网络阻塞，但 Go 的同步文件读取仍可能产生短暂磁盘等待。
 
 ## 加载与版本控制
+
+检查和切换的持久化状态、阶段耗时见[状态与操作报告](#状态与操作报告)。
 
 ### 缓存优先
 
@@ -341,6 +345,8 @@ type CacheStore interface {
     Get(ctx context.Context, version string) (*modellink.CacheEntry, error)
     Put(ctx context.Context, entry *modellink.CacheEntry) error
     SetCurrent(ctx context.Context, version string) error
+    State(ctx context.Context) (modellink.CacheState, error)
+    RecordCheck(ctx context.Context, check modellink.CheckState) error
 }
 
 type Locker interface {
@@ -351,6 +357,19 @@ type Locker interface {
 `Put` 必须原子发布完整版本，不能让读取方看到部分文件；找不到数据时返回
 `modellink.ErrNoCachedData`。客户端仍会重新校验 Manifest、文件哈希、Schema
 版本并解析 JSON，缓存实现不能绕过数据完整性检查。
+
+**自定义 Cache 升级注意**：新增 `State`、`RecordCheck` 两个必需方法。
+`State` 在新缓存上返回空结构，不返回 `ErrNoCachedData`；读取失败应返回错误，不能伪造空状态。
+`RecordCheck` 必须按 `CheckedAt` 保留较新检查，且不能覆盖版本和切换记录。
+`SetCurrent` 必须将当前版本与 `LastUpdate` 在一次原子事务中更新，并保留 `LastCheck`；
+版本没有变化时，不更新 `LastUpdate`。记录的 previous 必须是事务内读取到的版本，不能从 Client 内存猜测。
+首次激活的 PreviousVersion 为空，显式降级也属于切换。更新时间由缓存实现于事务中产生（UTC）。
+Redis 实现可使用 Lua/事务完成比较和合并，不要通过空实现跳过元数据。
+
+FileCache 将以上字段与旧 `version` 一起保存在 `current.json`，使用独立的 `metadata`
+文件锁及原子替换。锁遵循调用上下文并最多等待两分钟。旧的只有 `version` 的文件可直接读取，
+首次写入才扩展；历史检查/更新时间保持未知，绝不使用文件修改时间补造。清理历史版本不删除元数据。
+不建议新旧 SDK 同时写同一目录：旧 SDK 写入时不知道新字段，可能丢失历史信息。
 
 如果数据和锁位于不同系统，例如对象存储配 Redis 锁，可以组合为一个缓存：
 
@@ -390,6 +409,109 @@ model.Temperature != nil && *model.Temperature  // 明确支持调节
 ```
 
 不要把缺失字段自动当成 `false`，也不要根据上下文窗口推导缺失的最大输入或输出长度。
+
+## 状态与操作报告
+
+### 持久化状态
+
+```go
+state, err := client.Status(ctx) // 只读取共享缓存，不联网
+if err != nil {
+    return err
+}
+fmt.Println("当前激活版本:", state.Version)
+if check := state.LastCheck; check != nil {
+    fmt.Println("上次成功检查:", check.CheckedAt, check.LatestVersion, check.Registry)
+}
+if update := state.LastUpdate; update != nil {
+    fmt.Println("上次实际切换:", update.UpdatedAt,
+        update.PreviousVersion, "->", update.CurrentVersion)
+}
+```
+
+这是 SDK/共享缓存的状态，不代表应用已经替换它持有的旧 Snapshot。
+记录跨 Client、跨进程、跨重启保留；历史记录为 nil 表示未知。只保存最近一次检查/切换，
+不是审计日志。LastCheck.Registry 标识检查来源；多个 Registry 共用缓存时，保留全局最近的
+成功检查，而不是每个 Registry 各一条。跨主机的缓存使用方应保持系统时钟同步。
+
+- 无更新、镜像落后也刷新 LastCheck；纯缓存读取、查询指定版本不刷新。
+- 检查成功但下载/校验失败，LastCheck 保留，LastUpdate 不变。
+- 检查请求失败，旧 LastCheck 保留。检查记录写入失败也返回 error，不声称已持久化；
+  `CheckLatest` 的返回值仍保留已成功获取的 CheckedAt/LatestVersion，可连同 error 诊断。
+- 同版本激活不刷新 LastUpdate；第一次激活、升级和显式降级才刷新。
+- 激活已原子写入后即使解锁失败，LastUpdate 仍反映真实落盘结果；不能仅凭 error 推导未切换。
+- `CheckLatest` 直接返回的 `UpdateStatus` 另含 CheckedAt、Duration，Duration 不包含 OnOperation 回调。
+
+挂载点固定在最新版本解析成功和统一激活入口，便利方法不重复写状态：
+
+```mermaid
+flowchart TD
+    F[FindLatest] --> R[findLatestCheck]
+    C[CheckLatest] --> Q[checkLatest]
+    Q --> R
+    L[LoadLatest] --> Q
+    A[Load 缓存不可用] --> L
+    R --> P[RecordCheck 持久化]
+    L --> S[switchVersionOperation]
+    V[SwitchVersion] --> S
+    X[LoadVersion] --> E[加载指定版本 不激活]
+    S --> E
+    S --> T[activateCachedVersion]
+    B[ActivateVersion] --> T
+    T --> U[SetCurrent 原子保存版本与 LastUpdate]
+```
+
+`CurrentVersion`、`Status`、`LoadCached` 及缓存命中的 `Load` 不写事件状态；
+`LoadVersion` 只可能安装/清理数据包，不写检查和激活记录。
+
+### 单次操作报告
+
+```go
+client, err := modellink.New(modellink.Options{
+    OnOperation: func(report modellink.OperationReport) {
+        log.Printf("%s: start=%s end=%s total=%s err=%v",
+            report.Operation, report.StartedAt, report.FinishedAt,
+            report.Duration, report.Err)
+        for _, stage := range report.Stages {
+            log.Printf("  %s: %s", stage.Stage, stage.Duration)
+        }
+    },
+})
+```
+
+可运行示例：`go run ./examples/observability`（会检查 Registry 并加载数据）。
+Report 不持久化、不放到 Snapshot，也不改变现有 Load/Switch 返回值。
+未设置 OnOperation 时不采集阶段明细。阶段按开始顺序记录，允许重复，缺失表示没有执行。
+
+| Stage | 范围 |
+| --- | --- |
+| resolve | Registry 元数据请求及解析，含指定版本查询 |
+| lock_wait | 缓存锁等待，包括 FileCache 元数据锁 |
+| cache_read | 缓存数据与状态读取 |
+| download | 压缩包 HTTP 请求及响应体读取，不含包校验 |
+| verify | integrity/hash 校验、解包、Schema 版本检查及 JSON 解析 |
+| cache_write | 数据包和检查元数据写入 |
+| activate | 激活操作，含原子更新版本与切换记录 |
+| prune | 历史版本清理 |
+| shared_wait | 加入同一 Client 已有任务后的等待 |
+
+嵌套阶段使用排他耗时，例如激活内的验证和锁等待从 activate 中扣除。
+总耗时独立测量，含调度和其他未单列开销，不强求等于阶段之和。
+自定义 Cache 内部耗时计入其外层 cache_read/cache_write/activate，SDK 不猜测 Redis 内部的网络/验证划分。
+download 出现只证明尝试下载；需结合 Err、后续阶段判断结果，不能当作成功标记。
+
+### 并发与回调时机
+
+公开方法建立逻辑操作记录，内部组合调用不重复生成 Report。
+合并任务的发起调用把记录交给后台任务，任务结束、释放锁后产生一次完整报告；
+即使发起调用取消等待，后台任务仍会按原有三分钟上限运行并报告真实结果。
+后续加入的调用报告自己的 shared_wait（以及加入前已执行的步骤），不会复制实际下载耗时。
+因此发起调用收到取消错误时，后续仍可能收到成功的任务报告，不能将它当成“该调用的返回值日志”。
+
+OnOperation 在 Client/缓存锁外执行，可能并发发生，且后台报告可能在 API 返回后到达。
+回调应快速、线程安全，不计入该报告的耗时。不提供回调异常恢复；请勿 panic。
+不要在回调中无条件再次调用同一个 Client 的公开方法，否则这些方法又会触发回调。
+需要完整的逐调用日志、持久审计历史或进程退出时的日志排空时，由应用负责。
 
 ## Schema 与代码生成
 

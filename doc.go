@@ -15,4 +15,7 @@
 // changes the active version. Use NewFileCache to customize local retention,
 // or implement Cache to connect Redis or another shared backend. Compatibility
 // warnings are available from Snapshot.Warnings and Options.OnWarning.
+// Status reads persistent check and activation history from the cache.
+// FindLatest and CheckLatest persist successful checks without activating data.
+// Options.OnOperation optionally receives exclusive stage timings.
 package modellink
