@@ -18,6 +18,7 @@ go get github.com/goroutined/modellink-go
 | 检查并更新数据 | [`examples/update`](./examples/update) |
 | 审核并切换指定版本 | [`examples/version-control`](./examples/version-control) |
 | 修改缓存目录和保留数量 | [`examples/file-cache`](./examples/file-cache) |
+| 查看上次检查/切换状态、监控阶段耗时 | [状态与操作报告](#状态与操作报告)、[`examples/observability`](./examples/observability) |
 | 接入 Redis 或对象存储 | [自定义缓存](#自定义缓存) |
 | 维护 Schema 和生成类型 | [Schema 与代码生成](#schema-与代码生成) |
 
@@ -91,6 +92,7 @@ Client 内部：
 ```mermaid
 flowchart BT
     subgraph P["底层能力"]
+        ST["Status<br/>读取持久化状态"]
         CV["CurrentVersion<br/>读取当前版本"]
         LC["LoadCached<br/>读取当前缓存"]
         FL["FindLatest<br/>查询 Registry"]
@@ -120,7 +122,7 @@ flowchart BT
 
 返回值遵循固定规则：
 
-- `Current`、`Find`、`Check` 返回轻量状态。
+- `Status`、`Current`、`Find`、`Check` 返回轻量状态。
 - `Activate`、`Switch` 执行动作，只返回 `error`。
 - 只有 `Load*` 返回 `*Snapshot`。
 
@@ -150,10 +152,10 @@ Load(ctx context.Context) (*modellink.Snapshot, error)
 | `FindLatest` | 只查询元数据 | 写检查记录 | 否 | Registry 最新版本号 |
 | `CheckLatest` | 只查询元数据 | 写检查记录 | 否 | 版本比较状态及检查时间、耗时 |
 | `ActivateVersion` | 否 | 写激活元数据 | 是（版本不同时） | `error` |
-| `SwitchVersion` | 缓存未命中时访问 | 可能 | 是 | `error` |
+| `SwitchVersion` | 缓存未命中时访问 | 可能 | 版本变化时 | `error` |
 | `LoadCached` | 否 | 否 | 否 | 当前 Snapshot |
 | `LoadVersion` | 缓存未命中时访问 | 可能 | 否 | 指定版本 Snapshot |
-| `LoadLatest` | 是 | 可能 | 是 | 安全的最新 Snapshot |
+| `LoadLatest` | 是 | 写检查记录，可能安装数据 | 版本变化时 | 安全的最新 Snapshot |
 | `Load` | 仅无有效缓存时 | 可能 | 可能 | 当前可用 Snapshot |
 
 `LoadCached` 是本地只读调用，不发生网络阻塞，但 Go 的同步文件读取仍可能产生短暂磁盘等待。
@@ -314,7 +316,8 @@ cache, err := modellink.NewFileCache(modellink.FileCacheOptions{
 - 多个进程使用同一文件缓存时，通过带超时的系统文件锁共享下载与更新结果。
 - 已有可用缓存时，`Load` 不等待正在进行的更新。
 - 下载先写入独立临时目录；npm integrity、Manifest SHA-256、Schema 版本和 JSON 解析全部通过后才原子安装。
-- 更新失败不会覆盖当前可用版本。
+- 下载或校验失败不会切换当前版本；若激活已经完成，后续清理或解锁失败不回滚切换。
+  收到错误时可通过 `Status` 确认实际持久化结果。
 - 文件锁覆盖查询、下载、校验和激活的完整流程；进程退出后由操作系统自动释放。
 - 调用方取消等待不会取消其他 goroutine 已经共享的下载任务。
 
@@ -413,6 +416,18 @@ model.Temperature != nil && *model.Temperature  // 明确支持调节
 ## 状态与操作报告
 
 ### 持久化状态
+
+| 字段 | 含义 | 持久化/未知值 |
+| --- | --- | --- |
+| `CacheState.Version` | 共享缓存当前激活的版本，不代表应用已替换手中 Snapshot | 持久化；未激活时为空字符串 |
+| `LastCheck.CheckedAt` | 成功查询 Registry 最新版本后的 UTC 时间，无更新也记录 | 持久化；无已知记录时 `LastCheck == nil` |
+| `LastCheck.LatestVersion / Registry` | 该次查询得到的版本与查询来源，不保证此刻仍最新 | 随检查记录持久化 |
+| `LastUpdate.UpdatedAt` | 缓存原子切换当前版本时产生的 UTC 时间 | 持久化；无已知记录时 `LastUpdate == nil` |
+| `LastUpdate.PreviousVersion / CurrentVersion` | 最近一次实际切换前后的版本；首次激活的前版本为空 | 随切换记录持久化 |
+| `UpdateStatus.CheckedAt` | 本次成功远程检查时间；不表示后续持久化一定成功，须同时检查 `error` | 不单独存储；查询未成功时为零值 |
+| `UpdateStatus.Duration` | 本次 `CheckLatest` 总耗时，包含状态读取和检查记录写入，不含 `OnOperation` 回调 | 不持久化 |
+| `OperationReport.StartedAt / FinishedAt / Duration` | 本次逻辑操作起止 UTC 时间与总耗时 | 不持久化；共享任务可能在调用返回后结束 |
+| `StageReport.Duration` | 单次阶段排他耗时，同名阶段可能出现多次 | 不持久化；未执行的阶段不出现 |
 
 ```go
 state, err := client.Status(ctx) // 只读取共享缓存，不联网

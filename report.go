@@ -9,6 +9,7 @@ import (
 	"github.com/goroutined/modellink-go/internal/trace"
 )
 
+// Operation identifies the public entry point that initiated a logical task.
 type Operation string
 
 const (
@@ -24,6 +25,8 @@ const (
 	OperationLoad            Operation = "load"
 )
 
+// Stage identifies one measured phase of an operation. A phase may occur more
+// than once; an absent phase was not executed by this operation.
 type Stage string
 
 const (
@@ -38,6 +41,8 @@ const (
 	StageSharedWait Stage = "shared_wait"
 )
 
+// StageReport measures one phase, excluding time attributed to nested phases.
+// Reports are ordered by phase start time, not aggregated by Stage.
 type StageReport struct {
 	Stage    Stage
 	Duration time.Duration
@@ -47,13 +52,18 @@ type StageReport struct {
 // its own shared_wait; the original task reports its work even if its caller
 // cancels. Err is the operation error; applications should apply their usual
 // redaction policy before exporting error messages to external log systems.
+// Reports are not persisted. Callbacks run outside client/cache locks, may run
+// concurrently, and may arrive after the initiating API call has returned.
 type OperationReport struct {
-	Operation  Operation
+	Operation Operation
+	// StartedAt and FinishedAt are UTC wall-clock timestamps.
 	StartedAt  time.Time
 	FinishedAt time.Time
-	Duration   time.Duration
-	Stages     []StageReport
-	Err        error
+	// Duration includes unclassified overhead but excludes the report callback.
+	// It need not equal the sum of the exclusive stage durations.
+	Duration time.Duration
+	Stages   []StageReport
+	Err      error
 }
 type operationKey struct{}
 type operationScope struct {

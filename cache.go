@@ -32,21 +32,27 @@ type CacheStore interface {
 
 // CheckState records a successful latest lookup, not a successful download.
 type CheckState struct {
-	CheckedAt     time.Time `json:"checked_at"`
-	LatestVersion string    `json:"latest_version"`
-	Registry      string    `json:"registry"`
+	// CheckedAt is the UTC time of a successful latest lookup, even if unchanged.
+	CheckedAt time.Time `json:"checked_at"`
+	// LatestVersion is what Registry returned at CheckedAt, not a live value.
+	LatestVersion string `json:"latest_version"`
+	Registry      string `json:"registry"`
 }
 
 // UpdateState records the last actual change of the shared active pointer.
 type UpdateState struct {
-	UpdatedAt       time.Time `json:"updated_at"`
-	PreviousVersion string    `json:"previous_version"`
-	CurrentVersion  string    `json:"current_version"`
+	// UpdatedAt is set in the cache activation transaction, only on version change.
+	UpdatedAt time.Time `json:"updated_at"`
+	// PreviousVersion is empty for the first activation.
+	PreviousVersion string `json:"previous_version"`
+	CurrentVersion  string `json:"current_version"`
 }
 
 // CacheState survives process restarts. Nil records mean no known event.
 // Version uses the legacy current.json field for backwards-readable storage.
 type CacheState struct {
+	// Version is the shared active pointer, not the version of an application's
+	// previously loaded Snapshot. Empty means no version has been activated.
 	Version    string       `json:"version,omitempty"`
 	LastCheck  *CheckState  `json:"last_check,omitempty"`
 	LastUpdate *UpdateState `json:"last_update,omitempty"`

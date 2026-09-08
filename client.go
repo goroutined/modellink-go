@@ -30,6 +30,7 @@ type Options struct {
 	OnWarning func(Warning)
 	// OnOperation receives completed logical operations outside cache/client
 	// locks. Calls can be concurrent; keep the handler short and concurrency-safe.
+	// Shared tasks may report after the API returns. Nil disables stage collection.
 	OnOperation func(OperationReport)
 }
 
@@ -55,8 +56,12 @@ type UpdateStatus struct {
 	LatestVersion   string
 	UpdateAvailable bool
 	RegistryBehind  bool
-	CheckedAt       time.Time
-	Duration        time.Duration
+	// CheckedAt is the UTC successful lookup time, or zero if lookup failed.
+	// It may be populated alongside an error if persisting the check failed.
+	CheckedAt time.Time
+	// Duration covers CheckLatest including metadata persistence, excluding the
+	// OnOperation callback. It is not persisted in CacheState.
+	Duration time.Duration
 }
 
 type flight struct {
