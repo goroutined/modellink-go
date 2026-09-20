@@ -76,9 +76,9 @@ func cachedVersionNames(t testing.TB, directory string) []string {
 func TestFileCacheRetainsCurrentAndOneRecentVersion(t *testing.T) {
 	directory := t.TempDir()
 	registry := newTestRegistry(t, "1.0.0", map[string]int{
-		"1.0.0": 1,
-		"2.0.0": 1,
-		"3.0.0": 1,
+		"1.0.0": SupportedSchemaVersion,
+		"2.0.0": SupportedSchemaVersion,
+		"3.0.0": SupportedSchemaVersion,
 	})
 	client, err := New(Options{
 		Registry: registry.server.URL,
@@ -104,9 +104,9 @@ func TestFileCacheRetainsCurrentAndOneRecentVersion(t *testing.T) {
 func TestFileCacheCanDisableVersionCleanup(t *testing.T) {
 	directory := t.TempDir()
 	registry := newTestRegistry(t, "1.0.0", map[string]int{
-		"1.0.0": 1,
-		"2.0.0": 1,
-		"3.0.0": 1,
+		"1.0.0": SupportedSchemaVersion,
+		"2.0.0": SupportedSchemaVersion,
+		"3.0.0": SupportedSchemaVersion,
 	})
 	client, err := New(Options{
 		Registry: registry.server.URL,
@@ -133,9 +133,9 @@ func TestFileCacheCanDisableVersionCleanup(t *testing.T) {
 func TestFileCacheBoundsExplicitVersionsWithoutDeletingCurrent(t *testing.T) {
 	directory := t.TempDir()
 	registry := newTestRegistry(t, "1.0.0", map[string]int{
-		"1.0.0": 1,
-		"2.0.0": 1,
-		"3.0.0": 1,
+		"1.0.0": SupportedSchemaVersion,
+		"2.0.0": SupportedSchemaVersion,
+		"3.0.0": SupportedSchemaVersion,
 	})
 	client, err := New(Options{
 		Registry: registry.server.URL,

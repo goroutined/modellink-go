@@ -48,7 +48,7 @@ func mustConfiguredFileCache(t testing.TB, options FileCacheOptions) *FileCache 
 
 func TestLoadUsesVerifiedCacheWithoutNetwork(t *testing.T) {
 	cacheDir := t.TempDir()
-	registry := newTestRegistry(t, "1.2.3", map[string]int{"1.2.3": 1})
+	registry := newTestRegistry(t, "1.2.3", map[string]int{"1.2.3": SupportedSchemaVersion})
 	client, err := New(Options{
 		Registry: registry.server.URL,
 		Cache:    mustFileCache(t, cacheDir),
@@ -78,7 +78,7 @@ func TestLoadUsesVerifiedCacheWithoutNetwork(t *testing.T) {
 }
 
 func TestLoadCachedNeverUsesNetwork(t *testing.T) {
-	registry := newTestRegistry(t, "1.2.3", map[string]int{"1.2.3": 1})
+	registry := newTestRegistry(t, "1.2.3", map[string]int{"1.2.3": SupportedSchemaVersion})
 	client, err := New(Options{
 		Registry: registry.server.URL,
 		Cache:    mustFileCache(t, t.TempDir()),
@@ -96,8 +96,8 @@ func TestLoadCachedNeverUsesNetwork(t *testing.T) {
 
 func TestLoadPrefersCacheWithoutCheckingLatest(t *testing.T) {
 	registry := newTestRegistry(t, "1.0.0", map[string]int{
-		"1.0.0": 1,
-		"2.0.0": 1,
+		"1.0.0": SupportedSchemaVersion,
+		"2.0.0": SupportedSchemaVersion,
 	})
 	client, err := New(Options{
 		Registry: registry.server.URL,
@@ -125,7 +125,7 @@ func TestLoadPrefersCacheWithoutCheckingLatest(t *testing.T) {
 }
 
 func TestFindLatestOnlyReturnsVersionMetadata(t *testing.T) {
-	registry := newTestRegistry(t, "1.2.3", map[string]int{"1.2.3": 1})
+	registry := newTestRegistry(t, "1.2.3", map[string]int{"1.2.3": SupportedSchemaVersion})
 	client, err := New(Options{
 		Registry: registry.server.URL,
 		Cache:    mustFileCache(t, t.TempDir()),
@@ -150,7 +150,7 @@ func TestFindLatestOnlyReturnsVersionMetadata(t *testing.T) {
 
 func TestLoadRepairsCorruptCachedVersion(t *testing.T) {
 	cacheDir := t.TempDir()
-	registry := newTestRegistry(t, "1.2.3", map[string]int{"1.2.3": 1})
+	registry := newTestRegistry(t, "1.2.3", map[string]int{"1.2.3": SupportedSchemaVersion})
 	client, err := New(Options{
 		Registry: registry.server.URL,
 		Cache:    mustFileCache(t, cacheDir),
@@ -190,8 +190,8 @@ func TestLoadRepairsCorruptCachedVersion(t *testing.T) {
 
 func TestLoadVersionDoesNotChangeActiveVersion(t *testing.T) {
 	registry := newTestRegistry(t, "1.0.0", map[string]int{
-		"1.0.0": 1,
-		"2.0.0": 1,
+		"1.0.0": SupportedSchemaVersion,
+		"2.0.0": SupportedSchemaVersion,
 	})
 	client, err := New(Options{
 		Registry: registry.server.URL,
@@ -222,8 +222,8 @@ func TestLoadVersionDoesNotChangeActiveVersion(t *testing.T) {
 
 func TestActivateAndSwitchVersion(t *testing.T) {
 	registry := newTestRegistry(t, "1.0.0", map[string]int{
-		"1.0.0": 1,
-		"2.0.0": 1,
+		"1.0.0": SupportedSchemaVersion,
+		"2.0.0": SupportedSchemaVersion,
 	})
 	client, err := New(Options{
 		Registry: registry.server.URL,
@@ -269,7 +269,12 @@ func TestActivateAndSwitchVersion(t *testing.T) {
 }
 
 func TestUnsupportedSchemaIsNotActivated(t *testing.T) {
-	registry := newTestRegistry(t, "2.0.0", map[string]int{"2.0.0": SupportedSchemaVersion + 1})
+	registry := newTestRegistryWithCatalogs(
+		t,
+		"2.0.0",
+		map[string]int{"2.0.0": SupportedSchemaVersion + 1},
+		map[string][]byte{"2.0.0": []byte(`{"models":[],"providers":{}}`)},
+	)
 	client, err := New(Options{
 		Registry: registry.server.URL,
 		Cache:    mustFileCache(t, t.TempDir()),
@@ -283,6 +288,110 @@ func TestUnsupportedSchemaIsNotActivated(t *testing.T) {
 	}
 	if _, err := client.cache.Current(context.Background()); !errors.Is(err, ErrNoCachedData) {
 		t.Fatalf("unsupported package became active: %v", err)
+	}
+}
+
+func TestFutureSchemaCompatibleCatalogIsActivated(t *testing.T) {
+	registry := newTestRegistry(t, "1.0.0", map[string]int{
+		"1.0.0": SupportedSchemaVersion,
+		"2.0.0": SupportedSchemaVersion + 1,
+	})
+	client, err := New(Options{
+		Registry: registry.server.URL,
+		Cache:    mustFileCache(t, t.TempDir()),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.LoadLatest(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	registry.latest.Store("2.0.0")
+	snapshot, err := client.LoadLatest(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Manifest.Version != "2.0.0" {
+		t.Fatalf("activated version %q, want 2.0.0", snapshot.Manifest.Version)
+	}
+	warnings := snapshot.Warnings()
+	if len(warnings) != 1 || warnings[0].Code != WarningSchemaSDKOutdated {
+		t.Fatalf("warnings are %+v, want schema_sdk_outdated", warnings)
+	}
+	current, err := client.CurrentVersion(context.Background())
+	if err != nil || current != "2.0.0" {
+		t.Fatalf("current version is %q, %v; want 2.0.0", current, err)
+	}
+}
+
+func TestFutureSchemaDecodeFailureRetainsCompatibleSnapshot(t *testing.T) {
+	registry := newTestRegistryWithCatalogs(
+		t,
+		"1.0.0",
+		map[string]int{
+			"1.0.0": SupportedSchemaVersion,
+			"2.0.0": SupportedSchemaVersion + 1,
+		},
+		map[string][]byte{"2.0.0": []byte(`{"models":[],"providers":{}}`)},
+	)
+	client, err := New(Options{
+		Registry: registry.server.URL,
+		Cache:    mustFileCache(t, t.TempDir()),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.LoadLatest(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	registry.latest.Store("2.0.0")
+	snapshot, err := client.LoadLatest(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Manifest.Version != "1.0.0" {
+		t.Fatalf("retained version %q, want 1.0.0", snapshot.Manifest.Version)
+	}
+	warnings := snapshot.Warnings()
+	var warning Warning
+	for _, candidate := range warnings {
+		if candidate.Code == WarningSchemaUpdateSkipped {
+			warning = candidate
+		}
+	}
+	if warning.Code != WarningSchemaUpdateSkipped {
+		t.Fatalf("warnings are %+v, want schema_update_skipped", warnings)
+	}
+	embedded := SchemaInfo()
+	if warning.DataPackageVersion != "2.0.0" ||
+		warning.DataSchemaVersion != SupportedSchemaVersion+1 ||
+		warning.CurrentVersion != "1.0.0" ||
+		warning.RegistryVersion != "2.0.0" ||
+		warning.EmbeddedPackageVersion != embedded.PackageVersion ||
+		warning.EmbeddedSchemaVersion != embedded.SchemaVersion {
+		t.Fatalf("warning metadata is incomplete: %+v", warning)
+	}
+	if _, err := client.cache.Get(context.Background(), "2.0.0"); !errors.Is(err, ErrNoCachedData) {
+		t.Fatalf("incompatible package became cached: %v", err)
+	}
+}
+
+func TestOlderSchemaIsRejected(t *testing.T) {
+	registry := newTestRegistry(t, "1.0.0", map[string]int{"1.0.0": SupportedSchemaVersion - 1})
+	client, err := New(Options{
+		Registry: registry.server.URL,
+		Cache:    mustFileCache(t, t.TempDir()),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.LoadVersion(context.Background(), "1.0.0"); !errors.Is(err, ErrUnsupportedSchema) {
+		t.Fatalf("expected unsupported schema error, got %v", err)
+	}
+	if _, err := client.cache.Current(context.Background()); !errors.Is(err, ErrNoCachedData) {
+		t.Fatalf("older package became active: %v", err)
 	}
 }
 
@@ -315,13 +424,23 @@ type testRegistry struct {
 
 func newTestRegistry(t *testing.T, latest string, schemaVersions map[string]int) *testRegistry {
 	t.Helper()
+	return newTestRegistryWithCatalogs(t, latest, schemaVersions, nil)
+}
+
+func newTestRegistryWithCatalogs(
+	t *testing.T,
+	latest string,
+	schemaVersions map[string]int,
+	catalogs map[string][]byte,
+) *testRegistry {
+	t.Helper()
 	type releaseData struct {
 		archive   []byte
 		integrity string
 	}
 	releases := make(map[string]releaseData, len(schemaVersions))
 	for version, schemaVersion := range schemaVersions {
-		archive, integrity := makeTestArchive(t, version, schemaVersion)
+		archive, integrity := makeTestArchiveWithCatalog(t, version, schemaVersion, catalogs[version])
 		releases[version] = releaseData{archive: archive, integrity: integrity}
 	}
 
@@ -389,12 +508,34 @@ func writeMetadata(
 	}
 }
 
-func makeTestArchive(t *testing.T, version string, schemaVersion int) ([]byte, string) {
+func makeTestArchive(
+	t *testing.T,
+	version string,
+	schemaVersion int,
+) ([]byte, string) {
 	t.Helper()
+	return makeTestArchiveWithCatalog(
+		t,
+		version,
+		schemaVersion,
+		[]byte(`{"models":{},"providers":{}}`),
+	)
+}
+
+func makeTestArchiveWithCatalog(
+	t *testing.T,
+	version string,
+	schemaVersion int,
+	catalog []byte,
+) ([]byte, string) {
+	t.Helper()
+	if catalog == nil {
+		catalog = []byte(`{"models":{},"providers":{}}`)
+	}
 	files := map[string][]byte{
 		"api.json":     []byte(`{}`),
 		"models.json":  []byte(`{}`),
-		"catalog.json": []byte(`{"models":{},"providers":{}}`),
+		"catalog.json": catalog,
 		"schema.json":  []byte(`{}`),
 	}
 	manifest := artifact.Manifest{

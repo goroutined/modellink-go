@@ -115,10 +115,48 @@ func (client *Client) loadLatestOperation(ctx context.Context) (*Snapshot, error
 		return nil, err
 	}
 	if status.RegistryBehind {
-		client.notifyWarning(registryBehindWarning(status.CurrentVersion, status.LatestVersion))
-		return client.loadCachedCurrent(ctx)
+		return client.fallbackToCachedCurrent(
+			ctx,
+			registryBehindWarning(status.CurrentVersion, status.LatestVersion),
+		)
 	}
-	return client.switchVersionOperation(ctx, status.LatestVersion)
+	snapshot, err := client.switchVersionOperation(ctx, status.LatestVersion)
+	if err == nil {
+		return snapshot, nil
+	}
+	var unsupported *unsupportedSchemaError
+	if errors.As(err, &unsupported) {
+		warning := schemaUpdateSkippedWarning(unsupported.manifest)
+		snapshot, fallbackErr := client.fallbackToCachedCurrent(
+			ctx,
+			warning,
+		)
+		if fallbackErr != nil {
+			return nil, fmt.Errorf("%w; compatible fallback unavailable: %v", err, fallbackErr)
+		}
+		return snapshot, nil
+	}
+	return nil, err
+}
+
+func (client *Client) fallbackToCachedCurrent(ctx context.Context, warning Warning) (*Snapshot, error) {
+	snapshot, err := client.loadCachedCurrent(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if warning.CurrentVersion == "" {
+		warning.CurrentVersion = snapshot.Manifest.Version
+	}
+	if warning.Code == WarningSchemaUpdateSkipped {
+		warning.Message = fmt.Sprintf(
+			"ModelLink registry latest %s uses Schema v%d, while this SDK supports Schema v%d; retained active data %s",
+			warning.DataPackageVersion,
+			warning.DataSchemaVersion,
+			SchemaInfo().SchemaVersion,
+			warning.CurrentVersion,
+		)
+	}
+	return snapshotWithWarning(snapshot, warning), nil
 }
 
 func (client *Client) pruneCache(ctx context.Context, protected ...string) error {
@@ -170,16 +208,32 @@ func (client *Client) acquireLock(ctx context.Context, key string) (Lock, error)
 }
 
 func snapshotFromPackage(pkg *artifact.Package) (*Snapshot, error) {
-	if pkg.Manifest.SchemaVersion < 1 || pkg.Manifest.SchemaVersion > SupportedSchemaVersion {
-		return nil, fmt.Errorf("%w: package uses %d, client supports up to %d", ErrUnsupportedSchema, pkg.Manifest.SchemaVersion, SupportedSchemaVersion)
+	if pkg.Manifest.SchemaVersion < SupportedSchemaVersion {
+		return nil, &unsupportedSchemaError{manifest: pkg.Manifest}
 	}
+	futureSchema := pkg.Manifest.SchemaVersion > SupportedSchemaVersion
 	var manifest Manifest
 	if err := json.Unmarshal(pkg.Files["manifest.json"], &manifest); err != nil {
+		if futureSchema {
+			return nil, &unsupportedSchemaError{manifest: pkg.Manifest, cause: err}
+		}
 		return nil, fmt.Errorf("modellink: decode public manifest: %w", err)
 	}
 	var catalog Catalog
 	if err := json.Unmarshal(pkg.Files["catalog.json"], &catalog); err != nil {
+		if futureSchema {
+			return nil, &unsupportedSchemaError{manifest: pkg.Manifest, cause: err}
+		}
 		return nil, fmt.Errorf("modellink: decode catalog: %w", err)
+	}
+	if catalog.Models == nil || catalog.Providers == nil {
+		if futureSchema {
+			return nil, &unsupportedSchemaError{
+				manifest: pkg.Manifest,
+				cause:    errors.New("core catalog maps are absent"),
+			}
+		}
+		return nil, errors.New("modellink: catalog is missing core models or providers maps")
 	}
 	return &Snapshot{
 		Manifest: manifest,
@@ -187,6 +241,28 @@ func snapshotFromPackage(pkg *artifact.Package) (*Snapshot, error) {
 		files:    snapshotFiles(pkg.Files),
 		warnings: schemaWarnings(manifest),
 	}, nil
+}
+
+type unsupportedSchemaError struct {
+	manifest artifact.Manifest
+	cause    error
+}
+
+func (err *unsupportedSchemaError) Error() string {
+	message := fmt.Sprintf(
+		"%s: package uses Schema v%d, client requires Schema v%d",
+		ErrUnsupportedSchema,
+		err.manifest.SchemaVersion,
+		SupportedSchemaVersion,
+	)
+	if err.cause != nil {
+		return fmt.Sprintf("%s: %v", message, err.cause)
+	}
+	return message
+}
+
+func (err *unsupportedSchemaError) Unwrap() error {
+	return ErrUnsupportedSchema
 }
 
 func snapshotFiles(files map[string][]byte) map[DataFile][]byte {

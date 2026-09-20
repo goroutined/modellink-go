@@ -651,6 +651,9 @@ type ProviderModelCost struct {
 	// InputAudio corresponds to the JSON schema field "input_audio".
 	InputAudio *float64 `json:"input_audio,omitempty"`
 
+	// Label corresponds to the JSON schema field "label".
+	Label *string `json:"label,omitempty"`
+
 	// Output corresponds to the JSON schema field "output".
 	Output float64 `json:"output"`
 
@@ -681,6 +684,9 @@ type ProviderModelCostCN struct {
 	// InputAudio corresponds to the JSON schema field "input_audio".
 	InputAudio *float64 `json:"input_audio,omitempty"`
 
+	// Label corresponds to the JSON schema field "label".
+	Label *string `json:"label,omitempty"`
+
 	// Output corresponds to the JSON schema field "output".
 	Output float64 `json:"output"`
 
@@ -710,6 +716,9 @@ type ProviderModelCostCNContextOver200K struct {
 	// InputAudio corresponds to the JSON schema field "input_audio".
 	InputAudio *float64 `json:"input_audio,omitempty"`
 
+	// Label corresponds to the JSON schema field "label".
+	Label *string `json:"label,omitempty"`
+
 	// Output corresponds to the JSON schema field "output".
 	Output float64 `json:"output"`
 
@@ -736,6 +745,9 @@ type ProviderModelCostCNContextOver200KThinking struct {
 	// InputAudio corresponds to the JSON schema field "input_audio".
 	InputAudio *float64 `json:"input_audio,omitempty"`
 
+	// Label corresponds to the JSON schema field "label".
+	Label *string `json:"label,omitempty"`
+
 	// Output corresponds to the JSON schema field "output".
 	Output float64 `json:"output"`
 
@@ -755,6 +767,9 @@ type ProviderModelCostCNThinking struct {
 
 	// InputAudio corresponds to the JSON schema field "input_audio".
 	InputAudio *float64 `json:"input_audio,omitempty"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label *string `json:"label,omitempty"`
 
 	// Output corresponds to the JSON schema field "output".
 	Output float64 `json:"output"`
@@ -776,6 +791,9 @@ type ProviderModelCostCNTiersElem struct {
 	// InputAudio corresponds to the JSON schema field "input_audio".
 	InputAudio *float64 `json:"input_audio,omitempty"`
 
+	// Label corresponds to the JSON schema field "label".
+	Label *string `json:"label,omitempty"`
+
 	// Output corresponds to the JSON schema field "output".
 	Output float64 `json:"output"`
 
@@ -788,8 +806,8 @@ type ProviderModelCostCNTiersElem struct {
 	// Thinking corresponds to the JSON schema field "thinking".
 	Thinking *ProviderModelCostCNTiersElemThinking `json:"thinking,omitempty"`
 
-	// Tier corresponds to the JSON schema field "tier".
-	Tier ProviderModelCostCNTiersElemTier `json:"tier"`
+	// When corresponds to the JSON schema field "when".
+	When ProviderModelCostCNTiersElemWhen `json:"when"`
 }
 
 type ProviderModelCostCNTiersElemThinking struct {
@@ -805,6 +823,9 @@ type ProviderModelCostCNTiersElemThinking struct {
 	// InputAudio corresponds to the JSON schema field "input_audio".
 	InputAudio *float64 `json:"input_audio,omitempty"`
 
+	// Label corresponds to the JSON schema field "label".
+	Label *string `json:"label,omitempty"`
+
 	// Output corresponds to the JSON schema field "output".
 	Output float64 `json:"output"`
 
@@ -812,27 +833,24 @@ type ProviderModelCostCNTiersElemThinking struct {
 	OutputAudio *float64 `json:"output_audio,omitempty"`
 }
 
-type ProviderModelCostCNTiersElemTier struct {
+type ProviderModelCostCNTiersElemWhen struct {
 	// Input corresponds to the JSON schema field "input".
-	Input *ProviderModelCostCNTiersElemTier_1Input `json:"input,omitempty"`
-
-	// Label corresponds to the JSON schema field "label".
-	Label *string `json:"label,omitempty"`
+	Input *ProviderModelCostCNTiersElemWhen_1Input `json:"input,omitempty"`
 
 	// Output corresponds to the JSON schema field "output".
-	Output *ProviderModelCostCNTiersElemTier_1Output `json:"output,omitempty"`
+	Output *ProviderModelCostCNTiersElemWhen_1Output `json:"output,omitempty"`
 
 	// Size corresponds to the JSON schema field "size".
 	Size *int `json:"size,omitempty"`
 
 	// Time corresponds to the JSON schema field "time".
-	Time *ProviderModelCostCNTiersElemTier_1Time `json:"time,omitempty"`
+	Time *ProviderModelCostCNTiersElemWhen_1Time `json:"time,omitempty"`
 
 	// Type corresponds to the JSON schema field "type".
 	Type string `json:"type"`
 }
 
-type ProviderModelCostCNTiersElemTier_0 struct {
+type ProviderModelCostCNTiersElemWhen_0 struct {
 	// Size corresponds to the JSON schema field "size".
 	Size int `json:"size"`
 
@@ -840,24 +858,21 @@ type ProviderModelCostCNTiersElemTier_0 struct {
 	Type string `json:"type"`
 }
 
-type ProviderModelCostCNTiersElemTier_1 struct {
+type ProviderModelCostCNTiersElemWhen_1 struct {
 	// Input corresponds to the JSON schema field "input".
-	Input *ProviderModelCostCNTiersElemTier_1Input `json:"input,omitempty"`
-
-	// Label corresponds to the JSON schema field "label".
-	Label *string `json:"label,omitempty"`
+	Input *ProviderModelCostCNTiersElemWhen_1Input `json:"input,omitempty"`
 
 	// Output corresponds to the JSON schema field "output".
-	Output *ProviderModelCostCNTiersElemTier_1Output `json:"output,omitempty"`
+	Output *ProviderModelCostCNTiersElemWhen_1Output `json:"output,omitempty"`
 
 	// Time corresponds to the JSON schema field "time".
-	Time *ProviderModelCostCNTiersElemTier_1Time `json:"time,omitempty"`
+	Time *ProviderModelCostCNTiersElemWhen_1Time `json:"time,omitempty"`
 
 	// Type corresponds to the JSON schema field "type".
 	Type string `json:"type"`
 }
 
-type ProviderModelCostCNTiersElemTier_1Input struct {
+type ProviderModelCostCNTiersElemWhen_1Input struct {
 	// Gt corresponds to the JSON schema field "gt".
 	Gt *int `json:"gt,omitempty"`
 
@@ -871,7 +886,7 @@ type ProviderModelCostCNTiersElemTier_1Input struct {
 	Lte *int `json:"lte,omitempty"`
 }
 
-type ProviderModelCostCNTiersElemTier_1Output struct {
+type ProviderModelCostCNTiersElemWhen_1Output struct {
 	// Gt corresponds to the JSON schema field "gt".
 	Gt *int `json:"gt,omitempty"`
 
@@ -885,34 +900,38 @@ type ProviderModelCostCNTiersElemTier_1Output struct {
 	Lte *int `json:"lte,omitempty"`
 }
 
-type ProviderModelCostCNTiersElemTier_1Time struct {
+type ProviderModelCostCNTiersElemWhen_1Time struct {
 	// Timezone corresponds to the JSON schema field "timezone".
 	Timezone string `json:"timezone"`
 
 	// Windows corresponds to the JSON schema field "windows".
-	Windows []ProviderModelCostCNTiersElemTier_1TimeWindowsElem `json:"windows"`
+	Windows []ProviderModelCostCNTiersElemWhen_1TimeWindowsElem `json:"windows"`
 }
 
-type ProviderModelCostCNTiersElemTier_1TimeWindowsElem struct {
+type ProviderModelCostCNTiersElemWhen_1TimeWindowsElem struct {
 	// Days corresponds to the JSON schema field "days".
-	Days []ProviderModelCostCNTiersElemTier_1TimeWindowsElemDaysElem `json:"days,omitempty"`
+	Days []ProviderModelCostCNTiersElemWhen_1TimeWindowsElemDaysElem `json:"days"`
 
 	// End corresponds to the JSON schema field "end".
 	End string `json:"end"`
+
+	// Excludes this window on China statutory holidays; callers provide the holiday
+	// resolver.
+	Holiday *string `json:"holiday,omitempty"`
 
 	// Start corresponds to the JSON schema field "start".
 	Start string `json:"start"`
 }
 
-type ProviderModelCostCNTiersElemTier_1TimeWindowsElemDaysElem string
+type ProviderModelCostCNTiersElemWhen_1TimeWindowsElemDaysElem string
 
-const ProviderModelCostCNTiersElemTier_1TimeWindowsElemDaysElemFriday ProviderModelCostCNTiersElemTier_1TimeWindowsElemDaysElem = "friday"
-const ProviderModelCostCNTiersElemTier_1TimeWindowsElemDaysElemMonday ProviderModelCostCNTiersElemTier_1TimeWindowsElemDaysElem = "monday"
-const ProviderModelCostCNTiersElemTier_1TimeWindowsElemDaysElemSaturday ProviderModelCostCNTiersElemTier_1TimeWindowsElemDaysElem = "saturday"
-const ProviderModelCostCNTiersElemTier_1TimeWindowsElemDaysElemSunday ProviderModelCostCNTiersElemTier_1TimeWindowsElemDaysElem = "sunday"
-const ProviderModelCostCNTiersElemTier_1TimeWindowsElemDaysElemThursday ProviderModelCostCNTiersElemTier_1TimeWindowsElemDaysElem = "thursday"
-const ProviderModelCostCNTiersElemTier_1TimeWindowsElemDaysElemTuesday ProviderModelCostCNTiersElemTier_1TimeWindowsElemDaysElem = "tuesday"
-const ProviderModelCostCNTiersElemTier_1TimeWindowsElemDaysElemWednesday ProviderModelCostCNTiersElemTier_1TimeWindowsElemDaysElem = "wednesday"
+const ProviderModelCostCNTiersElemWhen_1TimeWindowsElemDaysElemFriday ProviderModelCostCNTiersElemWhen_1TimeWindowsElemDaysElem = "friday"
+const ProviderModelCostCNTiersElemWhen_1TimeWindowsElemDaysElemMonday ProviderModelCostCNTiersElemWhen_1TimeWindowsElemDaysElem = "monday"
+const ProviderModelCostCNTiersElemWhen_1TimeWindowsElemDaysElemSaturday ProviderModelCostCNTiersElemWhen_1TimeWindowsElemDaysElem = "saturday"
+const ProviderModelCostCNTiersElemWhen_1TimeWindowsElemDaysElemSunday ProviderModelCostCNTiersElemWhen_1TimeWindowsElemDaysElem = "sunday"
+const ProviderModelCostCNTiersElemWhen_1TimeWindowsElemDaysElemThursday ProviderModelCostCNTiersElemWhen_1TimeWindowsElemDaysElem = "thursday"
+const ProviderModelCostCNTiersElemWhen_1TimeWindowsElemDaysElemTuesday ProviderModelCostCNTiersElemWhen_1TimeWindowsElemDaysElem = "tuesday"
+const ProviderModelCostCNTiersElemWhen_1TimeWindowsElemDaysElemWednesday ProviderModelCostCNTiersElemWhen_1TimeWindowsElemDaysElem = "wednesday"
 
 type ProviderModelCostContextOver200K struct {
 	// CacheRead corresponds to the JSON schema field "cache_read".
@@ -926,6 +945,9 @@ type ProviderModelCostContextOver200K struct {
 
 	// InputAudio corresponds to the JSON schema field "input_audio".
 	InputAudio *float64 `json:"input_audio,omitempty"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label *string `json:"label,omitempty"`
 
 	// Output corresponds to the JSON schema field "output".
 	Output float64 `json:"output"`
@@ -945,14 +967,11 @@ type ProviderModelCostPoints struct {
 	// Input corresponds to the JSON schema field "input".
 	Input float64 `json:"input"`
 
-	// OffPeakMultiplier corresponds to the JSON schema field "off_peak_multiplier".
-	OffPeakMultiplier *float64 `json:"off_peak_multiplier,omitempty"`
+	// Label corresponds to the JSON schema field "label".
+	Label *string `json:"label,omitempty"`
 
 	// Output corresponds to the JSON schema field "output".
 	Output float64 `json:"output"`
-
-	// PeakWindow corresponds to the JSON schema field "peak_window".
-	PeakWindow *ProviderModelCostPointsPeakWindow `json:"peak_window,omitempty"`
 
 	// PerTokens corresponds to the JSON schema field "per_tokens".
 	PerTokens int `json:"per_tokens"`
@@ -961,30 +980,6 @@ type ProviderModelCostPoints struct {
 	Tiers []ProviderModelCostPointsTiersElem `json:"tiers,omitempty"`
 }
 
-type ProviderModelCostPointsPeakWindow struct {
-	// Days corresponds to the JSON schema field "days".
-	Days []ProviderModelCostPointsPeakWindowDaysElem `json:"days"`
-
-	// End corresponds to the JSON schema field "end".
-	End string `json:"end"`
-
-	// Start corresponds to the JSON schema field "start".
-	Start string `json:"start"`
-
-	// Timezone corresponds to the JSON schema field "timezone".
-	Timezone string `json:"timezone"`
-}
-
-type ProviderModelCostPointsPeakWindowDaysElem string
-
-const ProviderModelCostPointsPeakWindowDaysElemFriday ProviderModelCostPointsPeakWindowDaysElem = "friday"
-const ProviderModelCostPointsPeakWindowDaysElemMonday ProviderModelCostPointsPeakWindowDaysElem = "monday"
-const ProviderModelCostPointsPeakWindowDaysElemSaturday ProviderModelCostPointsPeakWindowDaysElem = "saturday"
-const ProviderModelCostPointsPeakWindowDaysElemSunday ProviderModelCostPointsPeakWindowDaysElem = "sunday"
-const ProviderModelCostPointsPeakWindowDaysElemThursday ProviderModelCostPointsPeakWindowDaysElem = "thursday"
-const ProviderModelCostPointsPeakWindowDaysElemTuesday ProviderModelCostPointsPeakWindowDaysElem = "tuesday"
-const ProviderModelCostPointsPeakWindowDaysElemWednesday ProviderModelCostPointsPeakWindowDaysElem = "wednesday"
-
 type ProviderModelCostPointsTiersElem struct {
 	// CacheRead corresponds to the JSON schema field "cache_read".
 	CacheRead *float64 `json:"cache_read,omitempty"`
@@ -992,34 +987,34 @@ type ProviderModelCostPointsTiersElem struct {
 	// Input corresponds to the JSON schema field "input".
 	Input float64 `json:"input"`
 
-	// Output corresponds to the JSON schema field "output".
-	Output float64 `json:"output"`
-
-	// Tier corresponds to the JSON schema field "tier".
-	Tier ProviderModelCostPointsTiersElemTier `json:"tier"`
-}
-
-type ProviderModelCostPointsTiersElemTier struct {
-	// Input corresponds to the JSON schema field "input".
-	Input *ProviderModelCostPointsTiersElemTier_1Input `json:"input,omitempty"`
-
 	// Label corresponds to the JSON schema field "label".
 	Label *string `json:"label,omitempty"`
 
 	// Output corresponds to the JSON schema field "output".
-	Output *ProviderModelCostPointsTiersElemTier_1Output `json:"output,omitempty"`
+	Output float64 `json:"output"`
+
+	// When corresponds to the JSON schema field "when".
+	When ProviderModelCostPointsTiersElemWhen `json:"when"`
+}
+
+type ProviderModelCostPointsTiersElemWhen struct {
+	// Input corresponds to the JSON schema field "input".
+	Input *ProviderModelCostPointsTiersElemWhen_1Input `json:"input,omitempty"`
+
+	// Output corresponds to the JSON schema field "output".
+	Output *ProviderModelCostPointsTiersElemWhen_1Output `json:"output,omitempty"`
 
 	// Size corresponds to the JSON schema field "size".
 	Size *int `json:"size,omitempty"`
 
 	// Time corresponds to the JSON schema field "time".
-	Time *ProviderModelCostPointsTiersElemTier_1Time `json:"time,omitempty"`
+	Time *ProviderModelCostPointsTiersElemWhen_1Time `json:"time,omitempty"`
 
 	// Type corresponds to the JSON schema field "type".
 	Type string `json:"type"`
 }
 
-type ProviderModelCostPointsTiersElemTier_0 struct {
+type ProviderModelCostPointsTiersElemWhen_0 struct {
 	// Size corresponds to the JSON schema field "size".
 	Size int `json:"size"`
 
@@ -1027,24 +1022,21 @@ type ProviderModelCostPointsTiersElemTier_0 struct {
 	Type string `json:"type"`
 }
 
-type ProviderModelCostPointsTiersElemTier_1 struct {
+type ProviderModelCostPointsTiersElemWhen_1 struct {
 	// Input corresponds to the JSON schema field "input".
-	Input *ProviderModelCostPointsTiersElemTier_1Input `json:"input,omitempty"`
-
-	// Label corresponds to the JSON schema field "label".
-	Label *string `json:"label,omitempty"`
+	Input *ProviderModelCostPointsTiersElemWhen_1Input `json:"input,omitempty"`
 
 	// Output corresponds to the JSON schema field "output".
-	Output *ProviderModelCostPointsTiersElemTier_1Output `json:"output,omitempty"`
+	Output *ProviderModelCostPointsTiersElemWhen_1Output `json:"output,omitempty"`
 
 	// Time corresponds to the JSON schema field "time".
-	Time *ProviderModelCostPointsTiersElemTier_1Time `json:"time,omitempty"`
+	Time *ProviderModelCostPointsTiersElemWhen_1Time `json:"time,omitempty"`
 
 	// Type corresponds to the JSON schema field "type".
 	Type string `json:"type"`
 }
 
-type ProviderModelCostPointsTiersElemTier_1Input struct {
+type ProviderModelCostPointsTiersElemWhen_1Input struct {
 	// Gt corresponds to the JSON schema field "gt".
 	Gt *int `json:"gt,omitempty"`
 
@@ -1058,7 +1050,7 @@ type ProviderModelCostPointsTiersElemTier_1Input struct {
 	Lte *int `json:"lte,omitempty"`
 }
 
-type ProviderModelCostPointsTiersElemTier_1Output struct {
+type ProviderModelCostPointsTiersElemWhen_1Output struct {
 	// Gt corresponds to the JSON schema field "gt".
 	Gt *int `json:"gt,omitempty"`
 
@@ -1072,34 +1064,38 @@ type ProviderModelCostPointsTiersElemTier_1Output struct {
 	Lte *int `json:"lte,omitempty"`
 }
 
-type ProviderModelCostPointsTiersElemTier_1Time struct {
+type ProviderModelCostPointsTiersElemWhen_1Time struct {
 	// Timezone corresponds to the JSON schema field "timezone".
 	Timezone string `json:"timezone"`
 
 	// Windows corresponds to the JSON schema field "windows".
-	Windows []ProviderModelCostPointsTiersElemTier_1TimeWindowsElem `json:"windows"`
+	Windows []ProviderModelCostPointsTiersElemWhen_1TimeWindowsElem `json:"windows"`
 }
 
-type ProviderModelCostPointsTiersElemTier_1TimeWindowsElem struct {
+type ProviderModelCostPointsTiersElemWhen_1TimeWindowsElem struct {
 	// Days corresponds to the JSON schema field "days".
-	Days []ProviderModelCostPointsTiersElemTier_1TimeWindowsElemDaysElem `json:"days,omitempty"`
+	Days []ProviderModelCostPointsTiersElemWhen_1TimeWindowsElemDaysElem `json:"days"`
 
 	// End corresponds to the JSON schema field "end".
 	End string `json:"end"`
+
+	// Excludes this window on China statutory holidays; callers provide the holiday
+	// resolver.
+	Holiday *string `json:"holiday,omitempty"`
 
 	// Start corresponds to the JSON schema field "start".
 	Start string `json:"start"`
 }
 
-type ProviderModelCostPointsTiersElemTier_1TimeWindowsElemDaysElem string
+type ProviderModelCostPointsTiersElemWhen_1TimeWindowsElemDaysElem string
 
-const ProviderModelCostPointsTiersElemTier_1TimeWindowsElemDaysElemFriday ProviderModelCostPointsTiersElemTier_1TimeWindowsElemDaysElem = "friday"
-const ProviderModelCostPointsTiersElemTier_1TimeWindowsElemDaysElemMonday ProviderModelCostPointsTiersElemTier_1TimeWindowsElemDaysElem = "monday"
-const ProviderModelCostPointsTiersElemTier_1TimeWindowsElemDaysElemSaturday ProviderModelCostPointsTiersElemTier_1TimeWindowsElemDaysElem = "saturday"
-const ProviderModelCostPointsTiersElemTier_1TimeWindowsElemDaysElemSunday ProviderModelCostPointsTiersElemTier_1TimeWindowsElemDaysElem = "sunday"
-const ProviderModelCostPointsTiersElemTier_1TimeWindowsElemDaysElemThursday ProviderModelCostPointsTiersElemTier_1TimeWindowsElemDaysElem = "thursday"
-const ProviderModelCostPointsTiersElemTier_1TimeWindowsElemDaysElemTuesday ProviderModelCostPointsTiersElemTier_1TimeWindowsElemDaysElem = "tuesday"
-const ProviderModelCostPointsTiersElemTier_1TimeWindowsElemDaysElemWednesday ProviderModelCostPointsTiersElemTier_1TimeWindowsElemDaysElem = "wednesday"
+const ProviderModelCostPointsTiersElemWhen_1TimeWindowsElemDaysElemFriday ProviderModelCostPointsTiersElemWhen_1TimeWindowsElemDaysElem = "friday"
+const ProviderModelCostPointsTiersElemWhen_1TimeWindowsElemDaysElemMonday ProviderModelCostPointsTiersElemWhen_1TimeWindowsElemDaysElem = "monday"
+const ProviderModelCostPointsTiersElemWhen_1TimeWindowsElemDaysElemSaturday ProviderModelCostPointsTiersElemWhen_1TimeWindowsElemDaysElem = "saturday"
+const ProviderModelCostPointsTiersElemWhen_1TimeWindowsElemDaysElemSunday ProviderModelCostPointsTiersElemWhen_1TimeWindowsElemDaysElem = "sunday"
+const ProviderModelCostPointsTiersElemWhen_1TimeWindowsElemDaysElemThursday ProviderModelCostPointsTiersElemWhen_1TimeWindowsElemDaysElem = "thursday"
+const ProviderModelCostPointsTiersElemWhen_1TimeWindowsElemDaysElemTuesday ProviderModelCostPointsTiersElemWhen_1TimeWindowsElemDaysElem = "tuesday"
+const ProviderModelCostPointsTiersElemWhen_1TimeWindowsElemDaysElemWednesday ProviderModelCostPointsTiersElemWhen_1TimeWindowsElemDaysElem = "wednesday"
 
 type ProviderModelCostTiersElem struct {
 	// CacheRead corresponds to the JSON schema field "cache_read".
@@ -1114,6 +1110,9 @@ type ProviderModelCostTiersElem struct {
 	// InputAudio corresponds to the JSON schema field "input_audio".
 	InputAudio *float64 `json:"input_audio,omitempty"`
 
+	// Label corresponds to the JSON schema field "label".
+	Label *string `json:"label,omitempty"`
+
 	// Output corresponds to the JSON schema field "output".
 	Output float64 `json:"output"`
 
@@ -1123,31 +1122,28 @@ type ProviderModelCostTiersElem struct {
 	// Reasoning corresponds to the JSON schema field "reasoning".
 	Reasoning *float64 `json:"reasoning,omitempty"`
 
-	// Tier corresponds to the JSON schema field "tier".
-	Tier ProviderModelCostTiersElemTier `json:"tier"`
+	// When corresponds to the JSON schema field "when".
+	When ProviderModelCostTiersElemWhen `json:"when"`
 }
 
-type ProviderModelCostTiersElemTier struct {
+type ProviderModelCostTiersElemWhen struct {
 	// Input corresponds to the JSON schema field "input".
-	Input *ProviderModelCostTiersElemTier_1Input `json:"input,omitempty"`
-
-	// Label corresponds to the JSON schema field "label".
-	Label *string `json:"label,omitempty"`
+	Input *ProviderModelCostTiersElemWhen_1Input `json:"input,omitempty"`
 
 	// Output corresponds to the JSON schema field "output".
-	Output *ProviderModelCostTiersElemTier_1Output `json:"output,omitempty"`
+	Output *ProviderModelCostTiersElemWhen_1Output `json:"output,omitempty"`
 
 	// Size corresponds to the JSON schema field "size".
 	Size *int `json:"size,omitempty"`
 
 	// Time corresponds to the JSON schema field "time".
-	Time *ProviderModelCostTiersElemTier_1Time `json:"time,omitempty"`
+	Time *ProviderModelCostTiersElemWhen_1Time `json:"time,omitempty"`
 
 	// Type corresponds to the JSON schema field "type".
 	Type string `json:"type"`
 }
 
-type ProviderModelCostTiersElemTier_0 struct {
+type ProviderModelCostTiersElemWhen_0 struct {
 	// Size corresponds to the JSON schema field "size".
 	Size int `json:"size"`
 
@@ -1155,24 +1151,21 @@ type ProviderModelCostTiersElemTier_0 struct {
 	Type string `json:"type"`
 }
 
-type ProviderModelCostTiersElemTier_1 struct {
+type ProviderModelCostTiersElemWhen_1 struct {
 	// Input corresponds to the JSON schema field "input".
-	Input *ProviderModelCostTiersElemTier_1Input `json:"input,omitempty"`
-
-	// Label corresponds to the JSON schema field "label".
-	Label *string `json:"label,omitempty"`
+	Input *ProviderModelCostTiersElemWhen_1Input `json:"input,omitempty"`
 
 	// Output corresponds to the JSON schema field "output".
-	Output *ProviderModelCostTiersElemTier_1Output `json:"output,omitempty"`
+	Output *ProviderModelCostTiersElemWhen_1Output `json:"output,omitempty"`
 
 	// Time corresponds to the JSON schema field "time".
-	Time *ProviderModelCostTiersElemTier_1Time `json:"time,omitempty"`
+	Time *ProviderModelCostTiersElemWhen_1Time `json:"time,omitempty"`
 
 	// Type corresponds to the JSON schema field "type".
 	Type string `json:"type"`
 }
 
-type ProviderModelCostTiersElemTier_1Input struct {
+type ProviderModelCostTiersElemWhen_1Input struct {
 	// Gt corresponds to the JSON schema field "gt".
 	Gt *int `json:"gt,omitempty"`
 
@@ -1186,7 +1179,7 @@ type ProviderModelCostTiersElemTier_1Input struct {
 	Lte *int `json:"lte,omitempty"`
 }
 
-type ProviderModelCostTiersElemTier_1Output struct {
+type ProviderModelCostTiersElemWhen_1Output struct {
 	// Gt corresponds to the JSON schema field "gt".
 	Gt *int `json:"gt,omitempty"`
 
@@ -1200,34 +1193,38 @@ type ProviderModelCostTiersElemTier_1Output struct {
 	Lte *int `json:"lte,omitempty"`
 }
 
-type ProviderModelCostTiersElemTier_1Time struct {
+type ProviderModelCostTiersElemWhen_1Time struct {
 	// Timezone corresponds to the JSON schema field "timezone".
 	Timezone string `json:"timezone"`
 
 	// Windows corresponds to the JSON schema field "windows".
-	Windows []ProviderModelCostTiersElemTier_1TimeWindowsElem `json:"windows"`
+	Windows []ProviderModelCostTiersElemWhen_1TimeWindowsElem `json:"windows"`
 }
 
-type ProviderModelCostTiersElemTier_1TimeWindowsElem struct {
+type ProviderModelCostTiersElemWhen_1TimeWindowsElem struct {
 	// Days corresponds to the JSON schema field "days".
-	Days []ProviderModelCostTiersElemTier_1TimeWindowsElemDaysElem `json:"days,omitempty"`
+	Days []ProviderModelCostTiersElemWhen_1TimeWindowsElemDaysElem `json:"days"`
 
 	// End corresponds to the JSON schema field "end".
 	End string `json:"end"`
+
+	// Excludes this window on China statutory holidays; callers provide the holiday
+	// resolver.
+	Holiday *string `json:"holiday,omitempty"`
 
 	// Start corresponds to the JSON schema field "start".
 	Start string `json:"start"`
 }
 
-type ProviderModelCostTiersElemTier_1TimeWindowsElemDaysElem string
+type ProviderModelCostTiersElemWhen_1TimeWindowsElemDaysElem string
 
-const ProviderModelCostTiersElemTier_1TimeWindowsElemDaysElemFriday ProviderModelCostTiersElemTier_1TimeWindowsElemDaysElem = "friday"
-const ProviderModelCostTiersElemTier_1TimeWindowsElemDaysElemMonday ProviderModelCostTiersElemTier_1TimeWindowsElemDaysElem = "monday"
-const ProviderModelCostTiersElemTier_1TimeWindowsElemDaysElemSaturday ProviderModelCostTiersElemTier_1TimeWindowsElemDaysElem = "saturday"
-const ProviderModelCostTiersElemTier_1TimeWindowsElemDaysElemSunday ProviderModelCostTiersElemTier_1TimeWindowsElemDaysElem = "sunday"
-const ProviderModelCostTiersElemTier_1TimeWindowsElemDaysElemThursday ProviderModelCostTiersElemTier_1TimeWindowsElemDaysElem = "thursday"
-const ProviderModelCostTiersElemTier_1TimeWindowsElemDaysElemTuesday ProviderModelCostTiersElemTier_1TimeWindowsElemDaysElem = "tuesday"
-const ProviderModelCostTiersElemTier_1TimeWindowsElemDaysElemWednesday ProviderModelCostTiersElemTier_1TimeWindowsElemDaysElem = "wednesday"
+const ProviderModelCostTiersElemWhen_1TimeWindowsElemDaysElemFriday ProviderModelCostTiersElemWhen_1TimeWindowsElemDaysElem = "friday"
+const ProviderModelCostTiersElemWhen_1TimeWindowsElemDaysElemMonday ProviderModelCostTiersElemWhen_1TimeWindowsElemDaysElem = "monday"
+const ProviderModelCostTiersElemWhen_1TimeWindowsElemDaysElemSaturday ProviderModelCostTiersElemWhen_1TimeWindowsElemDaysElem = "saturday"
+const ProviderModelCostTiersElemWhen_1TimeWindowsElemDaysElemSunday ProviderModelCostTiersElemWhen_1TimeWindowsElemDaysElem = "sunday"
+const ProviderModelCostTiersElemWhen_1TimeWindowsElemDaysElemThursday ProviderModelCostTiersElemWhen_1TimeWindowsElemDaysElem = "thursday"
+const ProviderModelCostTiersElemWhen_1TimeWindowsElemDaysElemTuesday ProviderModelCostTiersElemWhen_1TimeWindowsElemDaysElem = "tuesday"
+const ProviderModelCostTiersElemWhen_1TimeWindowsElemDaysElemWednesday ProviderModelCostTiersElemWhen_1TimeWindowsElemDaysElem = "wednesday"
 
 type ProviderModelExperimental struct {
 	// Modes corresponds to the JSON schema field "modes".
@@ -1258,6 +1255,9 @@ type ProviderModelExperimentalModesValueCost struct {
 	// InputAudio corresponds to the JSON schema field "input_audio".
 	InputAudio *float64 `json:"input_audio,omitempty"`
 
+	// Label corresponds to the JSON schema field "label".
+	Label *string `json:"label,omitempty"`
+
 	// Output corresponds to the JSON schema field "output".
 	Output float64 `json:"output"`
 
@@ -1280,6 +1280,9 @@ type ProviderModelExperimentalModesValueCostCN struct {
 
 	// InputAudio corresponds to the JSON schema field "input_audio".
 	InputAudio *float64 `json:"input_audio,omitempty"`
+
+	// Label corresponds to the JSON schema field "label".
+	Label *string `json:"label,omitempty"`
 
 	// Output corresponds to the JSON schema field "output".
 	Output float64 `json:"output"`

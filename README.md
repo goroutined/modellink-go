@@ -155,7 +155,7 @@ Load(ctx context.Context) (*modellink.Snapshot, error)
 | `SwitchVersion` | 缓存未命中时访问 | 可能 | 版本变化时 | `error` |
 | `LoadCached` | 否 | 否 | 否 | 当前 Snapshot |
 | `LoadVersion` | 缓存未命中时访问 | 可能 | 否 | 指定版本 Snapshot |
-| `LoadLatest` | 是 | 写检查记录，可能安装数据 | 版本变化时 | 安全的最新 Snapshot |
+| `LoadLatest` | 是 | 写检查记录，可能安装数据 | 版本变化时 | 安全的最新或当前兼容 Snapshot |
 | `Load` | 仅无有效缓存时 | 可能 | 可能 | 当前可用 Snapshot |
 
 `LoadCached` 是本地只读调用，不发生网络阻塞，但 Go 的同步文件读取仍可能产生短暂磁盘等待。
@@ -177,6 +177,9 @@ snapshot, err := client.Load(ctx)
 
 `LoadLatest` 每次都会检查 Registry。Registry 较新或当前无版本时切换到最新版本；
 Registry 暂时落后时保持本地较新版本并产生 `WarningRegistryBehind`：
+Registry 最新数据使用未来破坏性 Schema 时，SDK 会先尝试按当前 Go 类型解析其
+Core Catalog。解析成功则激活新数据并产生 `WarningSchemaSDKOutdated`；解析失败且
+本地已有可用版本时，返回旧 Snapshot 并产生 `WarningSchemaUpdateSkipped`。
 
 ```go
 snapshot, err := client.LoadLatest(ctx)
@@ -239,7 +242,13 @@ if status.RegistryBehind {
 SDK 会在每次加载后，本地比较数据包 `manifest.json` 中的 Schema 版本与 SHA-256，
 不会为此增加网络请求：
 
-- 数据使用更高的破坏性 Schema 版本时返回 `ErrUnsupportedSchema`，不切换当前缓存。
+- 未来破坏性 Schema 会先尝试解析。未知字段会被忽略，Core Catalog 仍可更新；
+  解析成功时产生 `WarningSchemaSDKOutdated`。
+- 未来破坏性 Schema 解析失败且本地已有兼容缓存时，返回旧缓存并产生
+  `WarningSchemaUpdateSkipped`；本地没有兼容缓存时返回 `ErrUnsupportedSchema`。
+- `LoadVersion` 和 `SwitchVersion` 是显式版本操作，遇到旧 Schema 直接返回
+  `ErrUnsupportedSchema`；未来 Schema 同样先尝试解析，解析失败时返回错误，
+  且不会自动替换成其他版本。
 - Schema 哈希不一致但仍可解析时继续返回 Snapshot，并产生非阻断 warning。
 - 仅 npm 数据版本不同、Schema 哈希相同时不会产生 warning。
 
@@ -263,8 +272,9 @@ for _, warning := range snapshot.Warnings() {
 }
 ```
 
-同一个 Client 对同一事件只调用一次 `OnWarning`，重复或并发调用不会刷屏。显式加载
-旧数据时会建议更新数据；数据 Schema 较新时会建议升级 `modellink-go`。
+同一个 Client 对同一事件只调用一次 `OnWarning`，重复或并发调用不会刷屏。数据
+Schema 较新时会建议升级 `modellink-go`；自动更新因未来 Schema 被跳过时会说明
+当前继续使用的版本。
 
 ## 缓存与并发
 
@@ -530,7 +540,8 @@ OnOperation 在 Client/缓存锁外执行，可能并发发生，且后台报告
 
 ## Schema 与代码生成
 
-当前内嵌 Schema v2，来源于 `@modellink/data 0.2.1`，同时兼容 Schema v1 数据。
+当前内嵌 Schema v3，来源于 `@modellink/data 0.3.0`。客户端只解析当前破坏性
+Schema 版本，不提供旧 Schema 数据的回滚读取。
 Provider 的可选 `Links` 提供 `Models`（模型目录）、`Pricing`（价格/套餐）、
 `APIKey`（申请和接入指引）、`Console`（管理后台）。使用前检查 `provider.Links != nil`
 及具体字段是否为 `nil`；旧数据或未提供的入口保持缺省。原 `Doc` 文档入口仍保留。
@@ -571,7 +582,11 @@ CI 会强制检查已提交 Schema 与生成代码是否一致。npm 最新数�
 go run ./internal/cmd/schemacheck
 ```
 
-当前客户端支持的破坏性 Schema 版本由 `modellink.SupportedSchemaVersion` 表示。遇到更高版本时客户端会返回 `modellink.ErrUnsupportedSchema`，并继续保留旧缓存。
+当前客户端支持的破坏性 Schema 版本由 `modellink.SupportedSchemaVersion` 表示。
+自动更新遇到更高版本时会先尝试解析最新 JSON：解析成功则使用新数据并产生
+`WarningSchemaSDKOutdated`；解析失败则保留当前兼容缓存并产生
+`WarningSchemaUpdateSkipped`。没有兼容缓存或显式加载不兼容版本时返回
+`modellink.ErrUnsupportedSchema`。
 
 ## 仓库结构
 

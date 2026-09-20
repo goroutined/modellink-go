@@ -15,7 +15,7 @@ import (
 
 func TestPersistentStateAcrossAllOperations(t *testing.T) {
 	ctx := context.Background()
-	registry := newTestRegistry(t, "2.0.0", map[string]int{"1.0.0": 1, "2.0.0": 1})
+	registry := newTestRegistry(t, "2.0.0", map[string]int{"1.0.0": SupportedSchemaVersion, "2.0.0": SupportedSchemaVersion})
 	dir := t.TempDir()
 	cache := mustFileCache(t, dir)
 	client, err := New(Options{Registry: registry.server.URL, Cache: cache})
@@ -164,7 +164,7 @@ func TestMetadataCrossProcessMerge(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
 	cache := mustFileCache(t, dir)
-	registry := newTestRegistry(t, "1.0.0", map[string]int{"1.0.0": 1})
+	registry := newTestRegistry(t, "1.0.0", map[string]int{"1.0.0": SupportedSchemaVersion})
 	client, err := New(Options{Registry: registry.server.URL, Cache: cache})
 	if err != nil {
 		t.Fatal(err)
@@ -212,7 +212,7 @@ func hasStage(r OperationReport, s Stage) bool {
 
 func TestReportsSeparateTransferAndCacheHits(t *testing.T) {
 	ctx := context.Background()
-	registry := newTestRegistry(t, "1.0.0", map[string]int{"1.0.0": 1})
+	registry := newTestRegistry(t, "1.0.0", map[string]int{"1.0.0": SupportedSchemaVersion})
 	reports := make(chan OperationReport, 10)
 	client, err := New(Options{Registry: registry.server.URL, Cache: mustFileCache(t, t.TempDir()), OnOperation: func(r OperationReport) { reports <- r }})
 	if err != nil {
@@ -254,7 +254,7 @@ func TestReportsSeparateTransferAndCacheHits(t *testing.T) {
 }
 
 func TestSharedReportSurvivesOwnerCancellation(t *testing.T) {
-	registry := newTestRegistry(t, "1.0.0", map[string]int{"1.0.0": 1})
+	registry := newTestRegistry(t, "1.0.0", map[string]int{"1.0.0": SupportedSchemaVersion})
 	gate := make(chan struct{})
 	registry.downloadGate = gate
 	var once sync.Once
@@ -290,7 +290,12 @@ func TestSharedReportSurvivesOwnerCancellation(t *testing.T) {
 }
 
 func TestFailedVerificationKeepsSuccessfulCheck(t *testing.T) {
-	registry := newTestRegistry(t, "1.0.0", map[string]int{"1.0.0": SupportedSchemaVersion + 1})
+	registry := newTestRegistryWithCatalogs(
+		t,
+		"1.0.0",
+		map[string]int{"1.0.0": SupportedSchemaVersion + 1},
+		map[string][]byte{"1.0.0": []byte(`{"models":[],"providers":{}}`)},
+	)
 	cache := mustFileCache(t, t.TempDir())
 	client, err := New(Options{Registry: registry.server.URL, Cache: cache})
 	if err != nil {
@@ -312,7 +317,7 @@ func (cache *failedStateCache) RecordCheck(context.Context, CheckState) error {
 }
 
 func TestCheckStateWriteFailureIsVisible(t *testing.T) {
-	registry := newTestRegistry(t, "1.0.0", map[string]int{"1.0.0": 1})
+	registry := newTestRegistry(t, "1.0.0", map[string]int{"1.0.0": SupportedSchemaVersion})
 	cache := &failedStateCache{mustFileCache(t, t.TempDir())}
 	client, err := New(Options{Registry: registry.server.URL, Cache: cache})
 	if err != nil {
@@ -333,7 +338,7 @@ type reportTransport func(*http.Request) (*http.Response, error)
 func (f reportTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestNetworkDownloadFailureKeepsCheckAndReportsAttempt(t *testing.T) {
-	registry := newTestRegistry(t, "1.0.0", map[string]int{"1.0.0": 1})
+	registry := newTestRegistry(t, "1.0.0", map[string]int{"1.0.0": SupportedSchemaVersion})
 	cache := mustFileCache(t, t.TempDir())
 	reports := make(chan OperationReport, 1)
 	client, err := New(Options{Registry: registry.server.URL, Cache: cache, OnOperation: func(r OperationReport) { reports <- r }})
@@ -360,7 +365,7 @@ func TestNetworkDownloadFailureKeepsCheckAndReportsAttempt(t *testing.T) {
 }
 
 func TestEveryPublicOperationReports(t *testing.T) {
-	registry := newTestRegistry(t, "1.0.0", map[string]int{"1.0.0": 1})
+	registry := newTestRegistry(t, "1.0.0", map[string]int{"1.0.0": SupportedSchemaVersion})
 	reports := make(chan OperationReport, 16)
 	cache := mustFileCache(t, t.TempDir())
 	client, err := New(Options{Registry: registry.server.URL, Cache: cache, OnOperation: func(r OperationReport) {

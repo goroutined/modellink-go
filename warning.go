@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/goroutined/modellink-go/internal/artifact"
 )
 
 // WarningCode identifies a non-fatal condition found while loading data.
@@ -22,6 +24,9 @@ const (
 	// WarningRegistryBehind means the registry latest version is older than the
 	// active local version and automatic downgrade was prevented.
 	WarningRegistryBehind WarningCode = "registry_behind"
+	// WarningSchemaUpdateSkipped means a future Schema package could not be
+	// decoded, so LoadLatest retained the active compatible snapshot instead.
+	WarningSchemaUpdateSkipped WarningCode = "schema_update_skipped"
 )
 
 // Warning describes an actionable, non-fatal compatibility condition.
@@ -45,6 +50,26 @@ func registryBehindWarning(current string, registry string) Warning {
 		Message:         fmt.Sprintf("ModelLink registry latest %s is behind active version %s; automatic downgrade was prevented", registry, current),
 		CurrentVersion:  current,
 		RegistryVersion: registry,
+	}
+}
+
+func schemaUpdateSkippedWarning(candidate artifact.Manifest) Warning {
+	embedded := SchemaInfo()
+	return Warning{
+		Code: WarningSchemaUpdateSkipped,
+		Message: fmt.Sprintf(
+			"ModelLink registry latest %s uses Schema v%d, while this SDK supports Schema v%d; update github.com/goroutined/modellink-go to receive newer data",
+			candidate.Version,
+			candidate.SchemaVersion,
+			embedded.SchemaVersion,
+		),
+		DataPackageVersion:     candidate.Version,
+		DataSchemaVersion:      candidate.SchemaVersion,
+		DataSchemaSHA256:       candidate.Files["schema.json"].SHA256,
+		EmbeddedPackageVersion: embedded.PackageVersion,
+		EmbeddedSchemaVersion:  embedded.SchemaVersion,
+		EmbeddedSchemaSHA256:   embedded.SchemaSHA256,
+		RegistryVersion:        candidate.Version,
 	}
 }
 
@@ -83,8 +108,13 @@ func schemaWarnings(manifest Manifest) []Warning {
 			embedded.SchemaVersion,
 		)
 	case manifest.SchemaVersion > embedded.SchemaVersion:
-		// snapshotFromPackage rejects this case before constructing a Snapshot.
-		return nil
+		warning.Code = WarningSchemaSDKOutdated
+		warning.Message = fmt.Sprintf(
+			"ModelLink data %s uses Schema v%d, while this SDK embeds Schema v%d; parsed compatible core fields, update github.com/goroutined/modellink-go for newer fields",
+			manifest.Version,
+			manifest.SchemaVersion,
+			embedded.SchemaVersion,
+		)
 	default:
 		switch comparePackageVersions(manifest.Version, embedded.PackageVersion) {
 		case 1:

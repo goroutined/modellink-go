@@ -9,7 +9,7 @@ import (
 )
 
 func TestConcurrentLoadLatestDownloadsOnce(t *testing.T) {
-	registry := newTestRegistry(t, "1.2.3", map[string]int{"1.2.3": 1})
+	registry := newTestRegistry(t, "1.2.3", map[string]int{"1.2.3": SupportedSchemaVersion})
 	client, err := New(Options{
 		Registry: registry.server.URL,
 		Cache:    mustFileCache(t, t.TempDir()),
@@ -75,8 +75,8 @@ func TestConcurrentLoadLatestDownloadsOnce(t *testing.T) {
 
 func TestLoadLatestPreventsRegistryDowngrade(t *testing.T) {
 	registry := newTestRegistry(t, "2.0.0", map[string]int{
-		"1.0.0": 1,
-		"2.0.0": 1,
+		"1.0.0": SupportedSchemaVersion,
+		"2.0.0": SupportedSchemaVersion,
 	})
 	var mutex sync.Mutex
 	var warnings []Warning
@@ -134,7 +134,7 @@ func TestLoadLatestPreventsRegistryDowngrade(t *testing.T) {
 }
 
 func TestIndependentClientsShareFileCacheAndDownloadOnce(t *testing.T) {
-	registry := newTestRegistry(t, "1.2.3", map[string]int{"1.2.3": 1})
+	registry := newTestRegistry(t, "1.2.3", map[string]int{"1.2.3": SupportedSchemaVersion})
 	directory := t.TempDir()
 	first, err := New(Options{
 		Registry: registry.server.URL,
@@ -172,7 +172,7 @@ func TestIndependentClientsShareFileCacheAndDownloadOnce(t *testing.T) {
 }
 
 func TestCanceledWaiterDoesNotCancelSharedDownload(t *testing.T) {
-	registry := newTestRegistry(t, "1.2.3", map[string]int{"1.2.3": 1})
+	registry := newTestRegistry(t, "1.2.3", map[string]int{"1.2.3": SupportedSchemaVersion})
 	registry.downloadGate = make(chan struct{})
 	client, err := New(Options{
 		Registry: registry.server.URL,
@@ -228,8 +228,8 @@ func hasWaiters(client *Client, version string, count int) bool {
 
 func TestLoadReturnsActiveSnapshotWhileUpdateIsRunning(t *testing.T) {
 	registry := newTestRegistry(t, "1.0.0", map[string]int{
-		"1.0.0": 1,
-		"2.0.0": 1,
+		"1.0.0": SupportedSchemaVersion,
+		"2.0.0": SupportedSchemaVersion,
 	})
 	client, err := New(Options{
 		Registry: registry.server.URL,

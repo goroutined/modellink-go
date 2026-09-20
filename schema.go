@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-const SupportedSchemaVersion = 2
+const SupportedSchemaVersion = 3
 
 //go:embed schema/schema.json
 var embeddedSchema []byte

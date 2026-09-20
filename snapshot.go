@@ -44,6 +44,18 @@ func (snapshot *Snapshot) Warnings() []Warning {
 	return append([]Warning(nil), snapshot.warnings...)
 }
 
+func snapshotWithWarning(snapshot *Snapshot, warning Warning) *Snapshot {
+	if snapshot == nil {
+		return nil
+	}
+	return &Snapshot{
+		Manifest: snapshot.Manifest,
+		Catalog:  snapshot.Catalog,
+		files:    snapshot.files,
+		warnings: append(snapshot.Warnings(), warning),
+	}
+}
+
 // Model returns canonical base-model metadata by its globally unique ID.
 func (snapshot *Snapshot) Model(id string) (ModelMetadata, bool) {
 	if snapshot == nil {
