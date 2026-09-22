@@ -538,6 +538,35 @@ OnOperation 在 Client/缓存锁外执行，可能并发发生，且后台报告
 不要在回调中无条件再次调用同一个 Client 的公开方法，否则这些方法又会触发回调。
 需要完整的逐调用日志、持久审计历史或进程退出时的日志排空时，由应用负责。
 
+## 候选数据包验证
+
+`internal/cmd/verifydata` 用一个只监听本机回环地址的临时 npm Registry 验证尚未发布的
+`@modellink/data` tarball。它执行完整客户端链路：解析 Registry 元数据、下载 tarball、
+校验外层 integrity、校验 manifest 内部 SHA-256、解码 Go 类型、比较原始 JSON 与强类型
+目录、写入临时 FileCache，并确认缓存重载不再访问 Registry。
+
+```bash
+go run ./internal/cmd/verifydata --tarball /path/to/modellink-data-0.3.2.tgz
+```
+
+也可以先用已发布包填充临时缓存，再把 Registry latest 切到候选包，验证真实升级路径：
+
+```bash
+go run ./internal/cmd/verifydata \
+  --tarball /path/to/modellink-data-0.3.2.tgz \
+  --baseline-tarball /path/to/modellink-data-0.3.1.tgz
+```
+
+默认允许同一破坏性 Schema 版本内的 additive 变更，并把 SDK Schema 落后记录为 warning。
+需要在发布关键版本前强制候选 Schema 与当前 SDK 内嵌 Schema 完全一致时，添加：
+
+```bash
+--strict-schema
+```
+
+命令只读取传入的 tarball，不访问真实 npm Registry，不发布包，不修改用户缓存，也不
+写入任何仓库文件。`--json` 可输出机器可读报告。
+
 ## Schema 与代码生成
 
 当前内嵌 Schema v3，来源于 `@modellink/data 0.3.0`。客户端只解析当前破坏性
@@ -611,7 +640,7 @@ types_custom.go        手写的特殊 JSON 类型
 zz_types_generated.go  Schema 自动生成类型，请勿手工修改
 
 internal/artifact/     npm 下载、integrity 和文件哈希校验
-internal/cmd/          Schema 同步、生成和检查命令
+internal/cmd/          Schema 同步、生成、检查和候选包验证命令
 examples/              可直接运行的使用示例
 schema/                生成依据和版本锁文件
 ```
